@@ -1,7 +1,5 @@
 # open.news - Social News Aggregation Platform
 
-# open.news - Social News Aggregation Platform
-
 open.news is an advanced social news aggregation platform built on top of Bluesky. It intelligently aggregates, ranks, and curates articles shared across the Bluesky network using sophisticated quality scoring algorithms and engagement metrics.
 
 ## Features
