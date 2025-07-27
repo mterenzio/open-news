@@ -1,0 +1,566 @@
+package handlers
+
+import (
+	"net/http"
+	"os"
+	"strconv"
+
+	"open-news/internal/models"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+// AdminHandler handles admin interface
+type AdminHandler struct {
+	db *gorm.DB
+}
+
+// NewAdminHandler creates a new admin handler
+func NewAdminHandler(db *gorm.DB) *AdminHandler {
+	return &AdminHandler{
+		db: db,
+	}
+}
+
+// AdminAuth middleware for basic password protection
+func (h *AdminHandler) AdminAuth() gin.HandlerFunc {
+	return gin.BasicAuth(gin.Accounts{
+		"admin": getAdminPassword(),
+	})
+}
+
+// getAdminPassword returns the admin password from environment or default
+func getAdminPassword() string {
+	password := os.Getenv("ADMIN_PASSWORD")
+	if password == "" {
+		password = "admin123" // Default password for development
+	}
+	return password
+}
+
+// ServeAdminDashboard serves the main admin dashboard
+func (h *AdminHandler) ServeAdminDashboard(c *gin.Context) {
+	// Get counts for dashboard stats
+	var userCount, sourceCount, articleCount int64
+	h.db.Model(&models.User{}).Count(&userCount)
+	h.db.Model(&models.Source{}).Count(&sourceCount)
+	h.db.Model(&models.Article{}).Count(&articleCount)
+
+	// Get recent activity
+	var recentArticles []models.Article
+	h.db.Preload("SourceArticles.Source").
+		Order("created_at DESC").
+		Limit(5).
+		Find(&recentArticles)
+
+	html := h.generateAdminDashboardHTML(userCount, sourceCount, articleCount, recentArticles)
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, html)
+}
+
+// ServeUsersPage serves the users management page
+func (h *AdminHandler) ServeUsersPage(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit := 20
+	offset := (page - 1) * limit
+
+	var users []models.User
+	var totalUsers int64
+
+	h.db.Model(&models.User{}).Count(&totalUsers)
+	h.db.Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&users)
+
+	html := h.generateUsersPageHTML(users, page, limit, totalUsers)
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, html)
+}
+
+// ServeSourcesPage serves the sources management page
+func (h *AdminHandler) ServeSourcesPage(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit := 20
+	offset := (page - 1) * limit
+
+	var sources []models.Source
+	var totalSources int64
+
+	h.db.Model(&models.Source{}).Count(&totalSources)
+	h.db.Order("quality_score DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&sources)
+
+	html := h.generateSourcesPageHTML(sources, page, limit, totalSources)
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, html)
+}
+
+// ServeArticlesPage serves the articles management page
+func (h *AdminHandler) ServeArticlesPage(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit := 20
+	offset := (page - 1) * limit
+
+	var articles []models.Article
+	var totalArticles int64
+
+	h.db.Model(&models.Article{}).Count(&totalArticles)
+	h.db.Preload("SourceArticles.Source").
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&articles)
+
+	html := h.generateArticlesPageHTML(articles, page, limit, totalArticles)
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, html)
+}
+
+// generateAdminDashboardHTML generates the main admin dashboard
+func (h *AdminHandler) generateAdminDashboardHTML(userCount, sourceCount, articleCount int64, recentArticles []models.Article) string {
+	return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open News Admin</title>
+    <link rel="stylesheet" href="/static/feed.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .admin-nav {
+            background: #1e293b;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        .admin-nav .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+        .admin-nav .nav-brand {
+            color: #f1f5f9;
+            font-weight: 700;
+            font-size: 1.25rem;
+        }
+        .admin-nav .nav-links {
+            display: flex;
+            gap: 1rem;
+        }
+        .admin-nav .nav-link {
+            color: #cbd5e1;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .admin-nav .nav-link:hover,
+        .admin-nav .nav-link.active {
+            background: #3b82f6;
+            color: white;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #3b82f6;
+            margin-bottom: 0.5rem;
+        }
+        .stat-label {
+            color: #64748b;
+            font-weight: 500;
+        }
+        .recent-activity {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .activity-item {
+            padding: 1rem 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <nav class="admin-nav">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <i class="fas fa-shield-alt"></i> Open News Admin
+            </div>
+            <div class="nav-links">
+                <a href="/admin" class="nav-link active">Dashboard</a>
+                <a href="/admin/users" class="nav-link">Users</a>
+                <a href="/admin/sources" class="nav-link">Sources</a>
+                <a href="/admin/articles" class="nav-link">Articles</a>
+                <a href="/" class="nav-link">← Back to Site</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-content">
+        <h1>Admin Dashboard</h1>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number">` + strconv.FormatInt(userCount, 10) + `</div>
+                <div class="stat-label">Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">` + strconv.FormatInt(sourceCount, 10) + `</div>
+                <div class="stat-label">Sources</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">` + strconv.FormatInt(articleCount, 10) + `</div>
+                <div class="stat-label">Articles</div>
+            </div>
+        </div>
+
+        <div class="recent-activity">
+            <h2>Recent Articles</h2>
+            ` + h.generateRecentArticlesHTML(recentArticles) + `
+        </div>
+    </div>
+</body>
+</html>`
+}
+
+// generateRecentArticlesHTML generates HTML for recent articles
+func (h *AdminHandler) generateRecentArticlesHTML(articles []models.Article) string {
+	if len(articles) == 0 {
+		return `<p>No articles found.</p>`
+	}
+
+	html := ""
+	for _, article := range articles {
+		sourceName := "Unknown Source"
+		if len(article.SourceArticles) > 0 && article.SourceArticles[0].Source.ID != uuid.Nil {
+			sourceName = article.SourceArticles[0].Source.DisplayName
+		}
+
+		html += `
+        <div class="activity-item">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <h4 style="margin: 0 0 0.5rem 0;">` + article.Title + `</h4>
+                    <p style="margin: 0; color: #64748b; font-size: 0.875rem;">
+                        by ` + sourceName + ` • ` + article.CreatedAt.Format("Jan 2, 3:04 PM") + `
+                    </p>
+                </div>
+                <div style="background: #f1f5f9; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem;">
+                    Score: ` + strconv.FormatFloat(article.QualityScore, 'f', 1, 64) + `
+                </div>
+            </div>
+        </div>`
+	}
+
+	return html
+}
+
+// generateUsersPageHTML generates the users management page
+func (h *AdminHandler) generateUsersPageHTML(users []models.User, page, limit int, total int64) string {
+	html := h.generateAdminLayout("Users", `/admin/users`)
+	
+	html += `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h1>Users (` + strconv.FormatInt(total, 10) + `)</h1>
+        </div>
+
+        <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead style="background: #f8fafc;">
+                    <tr>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Handle</th>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Display Name</th>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">DID</th>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Active</th>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Created</th>
+                    </tr>
+                </thead>
+                <tbody>`
+
+	for _, user := range users {
+		activeStatus := "❌"
+		if user.IsActive {
+			activeStatus = "✅"
+		}
+
+		html += `
+                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                        <td style="padding: 1rem;">@` + user.Handle + `</td>
+                        <td style="padding: 1rem;">` + user.DisplayName + `</td>
+                        <td style="padding: 1rem; font-family: monospace; font-size: 0.875rem;">` + user.BlueSkyDID[:20] + `...</td>
+                        <td style="padding: 1rem;">` + activeStatus + `</td>
+                        <td style="padding: 1rem;">` + user.CreatedAt.Format("Jan 2, 2006") + `</td>
+                    </tr>`
+	}
+
+	html += `
+                </tbody>
+            </table>
+        </div>
+
+        ` + h.generatePagination(page, limit, total, "/admin/users") + `
+    </div>
+</body>
+</html>`
+
+	return html
+}
+
+// generateSourcesPageHTML generates the sources management page
+func (h *AdminHandler) generateSourcesPageHTML(sources []models.Source, page, limit int, total int64) string {
+	html := h.generateAdminLayout("Sources", `/admin/sources`)
+	
+	html += `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h1>Sources (` + strconv.FormatInt(total, 10) + `)</h1>
+        </div>
+
+        <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead style="background: #f8fafc;">
+                    <tr>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Handle</th>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Display Name</th>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Quality Score</th>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Verified</th>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Created</th>
+                    </tr>
+                </thead>
+                <tbody>`
+
+	for _, source := range sources {
+		verifiedStatus := "❌"
+		if source.IsVerified {
+			verifiedStatus = "✅"
+		}
+
+		qualityClass := "background: #fef2f2; color: #991b1b;" // Low
+		if source.QualityScore >= 0.7 {
+			qualityClass = "background: #f0fdf4; color: #166534;" // High
+		} else if source.QualityScore >= 0.5 {
+			qualityClass = "background: #fefce8; color: #a16207;" // Medium
+		}
+
+		html += `
+                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                        <td style="padding: 1rem;">@` + source.Handle + `</td>
+                        <td style="padding: 1rem;">` + source.DisplayName + `</td>
+                        <td style="padding: 1rem;">
+                            <span style="padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.875rem; ` + qualityClass + `">
+                                ` + strconv.FormatFloat(source.QualityScore, 'f', 2, 64) + `
+                            </span>
+                        </td>
+                        <td style="padding: 1rem;">` + verifiedStatus + `</td>
+                        <td style="padding: 1rem;">` + source.CreatedAt.Format("Jan 2, 2006") + `</td>
+                    </tr>`
+	}
+
+	html += `
+                </tbody>
+            </table>
+        </div>
+
+        ` + h.generatePagination(page, limit, total, "/admin/sources") + `
+    </div>
+</body>
+</html>`
+
+	return html
+}
+
+// generateArticlesPageHTML generates the articles management page
+func (h *AdminHandler) generateArticlesPageHTML(articles []models.Article, page, limit int, total int64) string {
+	html := h.generateAdminLayout("Articles", `/admin/articles`)
+	
+	html += `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h1>Articles (` + strconv.FormatInt(total, 10) + `)</h1>
+        </div>
+
+        <div style="background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">`
+
+	for _, article := range articles {
+		sourceName := "Unknown Source"
+		if len(article.SourceArticles) > 0 && article.SourceArticles[0].Source.ID != uuid.Nil {
+			sourceName = article.SourceArticles[0].Source.DisplayName
+		}
+
+		qualityClass := "background: #fef2f2; color: #991b1b;" // Low
+		if article.QualityScore >= 0.7 {
+			qualityClass = "background: #f0fdf4; color: #166534;" // High
+		} else if article.QualityScore >= 0.5 {
+			qualityClass = "background: #fefce8; color: #a16207;" // Medium
+		}
+
+		html += `
+            <div style="border-bottom: 1px solid #e2e8f0; padding: 1.5rem 0;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+                    <div style="flex: 1;">
+                        <h3 style="margin: 0 0 0.5rem 0;">
+                            <a href="` + article.URL + `" target="_blank" style="color: #3b82f6; text-decoration: none;">
+                                ` + article.Title + `
+                            </a>
+                        </h3>
+                        <p style="margin: 0 0 0.5rem 0; color: #64748b; line-height: 1.5;">` + article.Description + `</p>
+                        <div style="display: flex; align-items: center; gap: 1rem; font-size: 0.875rem; color: #64748b;">
+                            <span>by ` + sourceName + `</span>
+                            <span>•</span>
+                            <span>` + article.CreatedAt.Format("Jan 2, 2006 3:04 PM") + `</span>
+                            <span style="padding: 0.25rem 0.5rem; border-radius: 4px; ` + qualityClass + `">
+                                Score: ` + strconv.FormatFloat(article.QualityScore, 'f', 1, 64) + `
+                            </span>
+                        </div>
+                    </div>`
+
+		if article.ImageURL != "" {
+			html += `
+                    <img src="` + article.ImageURL + `" 
+                         alt="Article image" 
+                         style="width: 120px; height: 120px; object-fit: cover; border-radius: 8px; flex-shrink: 0;">`
+		}
+
+		html += `
+                </div>
+            </div>`
+	}
+
+	html += `
+        </div>
+
+        ` + h.generatePagination(page, limit, total, "/admin/articles") + `
+    </div>
+</body>
+</html>`
+
+	return html
+}
+
+// generateAdminLayout generates the common admin layout
+func (h *AdminHandler) generateAdminLayout(title, activePath string) string {
+	return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>` + title + ` - Open News Admin</title>
+    <link rel="stylesheet" href="/static/feed.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .admin-nav {
+            background: #1e293b;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        .admin-nav .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+        .admin-nav .nav-brand {
+            color: #f1f5f9;
+            font-weight: 700;
+            font-size: 1.25rem;
+        }
+        .admin-nav .nav-links {
+            display: flex;
+            gap: 1rem;
+        }
+        .admin-nav .nav-link {
+            color: #cbd5e1;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .admin-nav .nav-link:hover,
+        .admin-nav .nav-link.active {
+            background: #3b82f6;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <nav class="admin-nav">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <i class="fas fa-shield-alt"></i> Open News Admin
+            </div>
+            <div class="nav-links">
+                <a href="/admin" class="nav-link` + h.getActiveClass("/admin", activePath) + `">Dashboard</a>
+                <a href="/admin/users" class="nav-link` + h.getActiveClass("/admin/users", activePath) + `">Users</a>
+                <a href="/admin/sources" class="nav-link` + h.getActiveClass("/admin/sources", activePath) + `">Sources</a>
+                <a href="/admin/articles" class="nav-link` + h.getActiveClass("/admin/articles", activePath) + `">Articles</a>
+                <a href="/" class="nav-link">← Back to Site</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-content">`
+}
+
+// getActiveClass returns " active" if the path matches
+func (h *AdminHandler) getActiveClass(path, activePath string) string {
+	if path == activePath {
+		return " active"
+	}
+	return ""
+}
+
+// generatePagination generates pagination controls
+func (h *AdminHandler) generatePagination(currentPage, limit int, total int64, basePath string) string {
+	totalPages := int((total + int64(limit) - 1) / int64(limit))
+	
+	if totalPages <= 1 {
+		return ""
+	}
+
+	html := `
+    <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #e2e8f0;">
+        ` + h.getPaginationButton(basePath, currentPage-1, "Previous", currentPage <= 1) + `
+        <span style="padding: 0.5rem 1rem; background: #3b82f6; color: white; border-radius: 6px;">
+            Page ` + strconv.Itoa(currentPage) + ` of ` + strconv.Itoa(totalPages) + `
+        </span>
+        ` + h.getPaginationButton(basePath, currentPage+1, "Next", currentPage >= totalPages) + `
+    </div>`
+
+	return html
+}
+
+// getPaginationButton generates a pagination button
+func (h *AdminHandler) getPaginationButton(basePath string, page int, text string, disabled bool) string {
+	if disabled {
+		return `<span style="padding: 0.5rem 1rem; background: #f1f5f9; color: #94a3b8; border-radius: 6px;">` + text + `</span>`
+	}
+	return `<a href="` + basePath + `?page=` + strconv.Itoa(page) + `" style="padding: 0.5rem 1rem; background: white; color: #3b82f6; border: 1px solid #e2e8f0; border-radius: 6px; text-decoration: none; transition: all 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">` + text + `</a>`
+}

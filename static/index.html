@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open News - Developer Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8f9fa;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+            color: white;
+            padding: 3rem 2rem;
+            margin-bottom: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(37, 99, 235, 0.3);
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 0.75rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        
+        .subtitle {
+            font-size: 1.3rem;
+            opacity: 0.95;
+            font-weight: 400;
+            margin-bottom: 1.5rem;
+        }
+        
+        .docs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .doc-card {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border: 1px solid #e5e7eb;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .doc-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        
+        .doc-card h2 {
+            color: #1f2937;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+        
+        .doc-card p {
+            color: #6b7280;
+            margin-bottom: 1.5rem;
+        }
+        
+        .doc-links {
+            list-style: none;
+        }
+        
+        .doc-links li {
+            margin-bottom: 0.5rem;
+        }
+        
+        .doc-links a {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .doc-links a:hover {
+            text-decoration: underline;
+        }
+        
+        .quick-commands {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border: 1px solid #e5e7eb;
+        }
+        
+        .quick-commands h2 {
+            color: #1f2937;
+            margin-bottom: 1rem;
+        }
+        
+        .command-section {
+            margin-bottom: 2rem;
+        }
+        
+        .command-section h3 {
+            color: #374151;
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+        
+        .command {
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            padding: 0.75rem;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            overflow-x: auto;
+        }
+        
+        .command:hover {
+            background: #e5e7eb;
+            cursor: pointer;
+        }
+        
+        .copy-btn {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-left: 0.5rem;
+        }
+        
+        .copy-btn:hover {
+            background: #059669;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 0.5rem 1.25rem;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-top: 0.5rem;
+            box-shadow: 0 2px 10px rgba(16, 185, 129, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        footer {
+            text-align: center;
+            color: #6b7280;
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            header {
+                padding: 2rem 1rem;
+                margin-bottom: 1.5rem;
+            }
+            
+            h1 {
+                font-size: 2.2rem;
+            }
+            
+            .subtitle {
+                font-size: 1.1rem;
+            }
+            
+            .docs-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+            
+            .doc-card {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Open News</h1>
+            <p class="subtitle">Developer Documentation & Testing Guide</p>
+            <div class="status-badge">🚀 Ready for Development</div>
+        </header>
+        
+        <div class="docs-grid">
+            <div class="doc-card">
+                <h2>📚 Documentation</h2>
+                <p>Comprehensive guides for setup, development, and deployment.</p>
+                <ul class="doc-links">
+                    <li><a href="/doc/README" target="_blank">📖 Project Overview</a></li>
+                    <li><a href="/doc/DEVELOPMENT" target="_blank">🛠 Development Setup</a></li>
+                    <li><a href="/doc/TESTING" target="_blank">🧪 Testing Guide</a></li>
+                    <li><a href="/doc/PRODUCTION_DEPLOYMENT" target="_blank">🚀 Production Deployment</a></li>
+                    <li><a href="/doc/BLUESKY_FEEDS" target="_blank">🐦 Bluesky Integration</a></li>
+                </ul>
+            </div>
+            
+            <div class="doc-card">
+                <h2>🔗 API Endpoints</h2>
+                <p>Test the application's API endpoints directly from your browser.</p>
+                <ul class="doc-links">
+                    <li><a href="/health" target="_blank">❤️ Health Check</a></li>
+                    <li><a href="/api/feeds/global" target="_blank">🌍 Global Feed</a></li>
+                    <li><a href="/api/worker/status" target="_blank">⚙️ Worker Status</a></li>
+                    <li><a href="/xrpc/app.bsky.feed.getFeedSkeleton?feed=at://did:plc:example/app.bsky.feed.generator/open-news-global" target="_blank">🐦 Bluesky Global Feed</a></li>
+                </ul>
+            </div>
+            
+            <div class="doc-card">
+                <h2>📰 Feed Interface</h2>
+                <p>Beautiful, reactive web interface for browsing news feeds with HTMX.</p>
+                <ul class="doc-links">
+                    <li><a href="/feeds" target="_blank">🌍 Interactive Feed Viewer</a></li>
+                    <li><a href="/widget-examples.html" target="_blank">🧩 Embeddable Widgets</a></li>
+                    <li><a href="/widget/global" target="_blank">🌐 Global Feed Widget</a></li>
+                    <li><a href="/widget/personal?user=bsky.app" target="_blank">👤 Personal Feed Widget</a></li>
+                </ul>
+            </div>
+            
+            <div class="doc-card">
+                <h2>⚡ Quick Start</h2>
+                <p>Get up and running in minutes with these essential commands.</p>
+                <ul class="doc-links">
+                    <li><a href="#seed-commands">🌱 Database Seeding</a></li>
+                    <li><a href="#server-commands">🚀 Server Commands</a></li>
+                    <li><a href="#test-commands">🧪 Testing Commands</a></li>
+                    <li><a href="#debug-commands">🐛 Debug Commands</a></li>
+                </ul>
+            </div>
+            <div class="doc-card">
+                <h2>⚡ Development Tools</h2>
+                <p>Convenient commands and scripts for efficient development workflow.</p>
+                <ul class="doc-links">
+                    <li><a href="#dev-commands">🔄 Server Management</a></li>
+                    <li><a href="#quick-commands">📋 Quick Commands</a></li>
+                    <li><a href="/doc/TESTING" target="_blank">🧪 Testing Guide</a></li>
+                    <li><a href="#makefile-commands">🛠 Makefile Commands</a></li>
+                    <li><a href="/admin" target="_blank">🛡️ Admin Interface</a></li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="quick-commands">
+            <h2>🔄 Development Server Management</h2>
+            <p style="margin-bottom: 1.5rem; color: #6b7280;">Use these commands to manage the development server without manual process management:</p>
+            
+            <div class="command-section" id="dev-commands">
+                <h3>📜 Development Script Commands</h3>
+                <div class="command" onclick="copyCommand(this)">
+                    ./dev restart
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('./dev restart')">Copy</button>
+                </div>
+                <div class="command" onclick="copyCommand(this)">
+                    ./dev status
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('./dev status')">Copy</button>
+                </div>
+                <div class="command" onclick="copyCommand(this)">
+                    ./dev logs
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('./dev logs')">Copy</button>
+                </div>
+                <div class="command" onclick="copyCommand(this)">
+                    ./dev seed -handle your.handle.bsky.social
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('./dev seed -handle your.handle.bsky.social')">Copy</button>
+                </div>
+            </div>
+            
+            <div class="command-section" id="makefile-commands">
+                <h3>🛠 Makefile Commands</h3>
+                <div class="command" onclick="copyCommand(this)">
+                    make restart
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('make restart')">Copy</button>
+                </div>
+                <div class="command" onclick="copyCommand(this)">
+                    make status
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('make status')">Copy</button>
+                </div>
+                <div class="command" onclick="copyCommand(this)">
+                    make test-api
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('make test-api')">Copy</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="quick-commands">
+            <h2>⚡ Quick Commands</h2>
+            
+            <div class="command-section" id="seed-commands">
+                <h3>🌱 Database Seeding</h3>
+                <div class="command" onclick="copyCommand(this)">
+                    go run cmd/seed.go
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('go run cmd/seed.go')">Copy</button>
+                </div>
+                <div class="command" onclick="copyCommand(this)">
+                    go run cmd/seed.go -handle your.handle.bsky.social
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('go run cmd/seed.go -handle your.handle.bsky.social')">Copy</button>
+                </div>
+            </div>
+            
+            <div class="command-section" id="server-commands">
+                <h3>🚀 Server Commands</h3>
+                <div class="command" onclick="copyCommand(this)">
+                    go run cmd/main.go server
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('go run cmd/main.go server')">Copy</button>
+                </div>
+                <div class="command" onclick="copyCommand(this)">
+                    make run
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('make run')">Copy</button>
+                </div>
+            </div>
+            
+            <div class="command-section" id="test-commands">
+                <h3>🧪 Testing Commands</h3>
+                <div class="command" onclick="copyCommand(this)">
+                    curl http://localhost:8080/health
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('curl http://localhost:8080/health')">Copy</button>
+                </div>
+                <div class="command" onclick="copyCommand(this)">
+                    curl http://localhost:8080/api/feeds/global
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('curl http://localhost:8080/api/feeds/global')">Copy</button>
+                </div>
+                <div class="command" onclick="copyCommand(this)">
+                    curl "http://localhost:8080/xrpc/app.bsky.feed.getFeedSkeleton?feed=at://did:plc:example/app.bsky.feed.generator/open-news-global"
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('curl &quot;http://localhost:8080/xrpc/app.bsky.feed.getFeedSkeleton?feed=at://did:plc:example/app.bsky.feed.generator/open-news-global&quot;')">Copy</button>
+                </div>
+                <div class="command" onclick="copyCommand(this)">
+                    curl -H "Authorization: Bearer test-token" "http://localhost:8080/xrpc/app.bsky.feed.getFeedSkeleton?feed=at://did:plc:example/app.bsky.feed.generator/open-news-personal"
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('curl -H &quot;Authorization: Bearer test-token&quot; &quot;http://localhost:8080/xrpc/app.bsky.feed.getFeedSkeleton?feed=at://did:plc:example/app.bsky.feed.generator/open-news-personal&quot;')">Copy</button>
+                </div>
+            </div>
+            
+            <div class="command-section" id="debug-commands">
+                <h3>🐛 Debug Commands</h3>
+                <div class="command" onclick="copyCommand(this)">
+                    curl http://localhost:8080/api/worker/status | jq
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('curl http://localhost:8080/api/worker/status | jq')">Copy</button>
+                </div>
+                <div class="command" onclick="copyCommand(this)">
+                    brew services list | grep postgresql
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('brew services list | grep postgresql')">Copy</button>
+                </div>
+                <div class="command" onclick="copyCommand(this)">
+                    psql -l | grep open_news
+                    <button class="copy-btn" onclick="event.stopPropagation(); copyText('psql -l | grep open_news')">Copy</button>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>Open News - Digg Clone for Bluesky | <a href="https://github.com/your-username/open-news" target="_blank">GitHub</a></p>
+        </footer>
+    </div>
+    
+    <script>
+        function copyText(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                // Show feedback
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✓ Copied!';
+                btn.style.background = '#059669';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = '#10b981';
+                }, 2000);
+            });
+        }
+        
+        function copyCommand(element) {
+            const command = element.textContent.replace('Copy', '').trim();
+            copyText(command);
+        }
+        
+        // Add click-to-copy functionality to all commands
+        document.querySelectorAll('.command').forEach(cmd => {
+            cmd.style.cursor = 'pointer';
+            cmd.title = 'Click to copy command';
+        });
+    </script>
+</body>
+</html>

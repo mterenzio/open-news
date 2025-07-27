@@ -1,0 +1,546 @@
+#!/bin/bash
+
+# Open News Development Server Manager
+# Provides convenient commands for development
+
+set -e
+
+PROJECT_ROOT="/Users/mterenzi/play/open-news"
+PORT=${PORT:-8080}
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Function to kill processes on port
+kill_port() {
+    local port=$1
+    local pids=$(lsof -ti:$port 2>/dev/null || true)
+    
+    if [ -n "$pids" ]; then
+        print_status "Stopping processes on port $port..."
+        echo "$pids" | xargs kill -9 2>/dev/null || true
+        sleep 1
+        print_success "Stopped processes on port $port"
+    else
+        print_status "No processes running on port $port"
+    fi
+}
+
+# Function to start the server
+start_server() {
+    print_status "Starting Open News server..."
+    cd "$PROJECT_ROOT"
+    
+    # Check if dependencies are up to date
+    go mod tidy > /dev/null 2>&1
+    
+    # Start server in background
+    nohup go run cmd/main.go > server.log 2>&1 &
+    local server_pid=$!
+    
+    # Wait a moment for server to start
+    sleep 3
+    
+    # Check if server is running
+    if curl -s http://localhost:$PORT/health > /dev/null 2>&1; then
+        print_success "Server started successfully on port $PORT"
+        print_success "Dashboard: http://localhost:$PORT"
+        print_status "Server PID: $server_pid"
+        print_status "Logs: tail -f $PROJECT_ROOT/server.log"
+    else
+        print_error "Failed to start server. Check logs:"
+        tail -10 server.log 2>/dev/null || echo "No log file found"
+        exit 1
+    fi
+}
+
+# Function to restart the server
+restart_server() {
+    print_status "Restarting Open News server..."
+    kill_port $PORT
+    start_server
+}
+
+# Function to stop the server
+stop_server() {
+    print_status "Stopping Open News server..."
+    kill_port $PORT
+    print_success "Server stopped"
+}
+
+# Function to show server status
+show_status() {
+    print_status "Checking server status..."
+    
+    local pids=$(lsof -ti:$PORT 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+        print_success "Server is running on port $PORT"
+        echo "PIDs: $pids"
+        
+        # Test health endpoint
+        if curl -s http://localhost:$PORT/health > /dev/null 2>&1; then
+            print_success "Health check: ✅ HEALTHY"
+        else
+            print_warning "Health check: ❌ UNHEALTHY"
+        fi
+        
+        # Show recent logs
+        if [ -f "server.log" ]; then
+            print_status "Recent logs:"
+            tail -5 server.log
+        fi
+    else
+        print_warning "Server is not running on port $PORT"
+    fi
+}
+
+# Function to show logs
+show_logs() {
+    if [ -f "$PROJECT_ROOT/server.log" ]; then
+        print_status "Showing server logs (Ctrl+C to exit)..."
+        tail -f "$PROJECT_ROOT/server.log"
+    else
+        print_warning "No log file found at $PROJECT_ROOT/server.log"
+    fi
+}
+
+# Function to test the API
+test_api() {
+    print_status "Testing API endpoints..."
+    
+    # Test health
+    if curl -s http://localhost:$PORT/health | jq . > /dev/null 2>&1; then
+        print_success "✅ Health endpoint working"
+    else
+        print_error "❌ Health endpoint failed"
+    fi
+    
+    # Test worker status
+    if curl -s http://localhost:$PORT/api/worker/status | jq . > /dev/null 2>&1; then
+        print_success "✅ Worker status endpoint working"
+    else
+        print_error "❌ Worker status endpoint failed"
+    fi
+    
+    # Test global feed
+    if curl -s http://localhost:$PORT/api/feeds/global | jq . > /dev/null 2>&1; then
+        print_success "✅ Global feed endpoint working"
+    else
+        print_error "❌ Global feed endpoint failed"
+    fi
+}
+
+# Function to debug feeds and articles
+debug_feeds() {
+    print_status "🔍 Debugging feeds and articles..."
+    
+    # Check if server is running
+    if ! curl -s http://localhost:$PORT/health > /dev/null 2>&1; then
+        print_error "Server is not running. Start it first with: $0 start"
+        return 1
+    fi
+    
+    # Database diagnostics
+    print_status "📊 Database diagnostics:"
+    
+    # Check table counts
+    echo "Table counts:"
+    psql -d mterenzi -c "
+        SELECT 
+            'users' as table_name, COUNT(*) as count FROM users
+        UNION ALL
+        SELECT 'sources', COUNT(*) FROM sources  
+        UNION ALL
+        SELECT 'articles', COUNT(*) FROM articles
+        UNION ALL
+        SELECT 'feeds', COUNT(*) FROM feeds
+        UNION ALL
+        SELECT 'feed_items', COUNT(*) FROM feed_items
+        ORDER BY table_name;
+    " 2>/dev/null || print_error "Failed to query table counts"
+    
+    # Check recent articles with detailed info
+    print_status "📰 Recent articles (top 3):"
+    psql -d mterenzi -c "
+        SELECT 
+            id,
+            LEFT(title, 60) as title,
+            quality_score,
+            engagement_score,
+            trending_score,
+            created_at
+        FROM articles 
+        ORDER BY created_at DESC 
+        LIMIT 3;
+    " 2>/dev/null || print_error "Failed to query articles"
+    
+    # Check feed configuration
+    print_status "📡 Feed configuration:"
+    psql -d mterenzi -c "
+        SELECT 
+            id,
+            feed_type,
+            name,
+            is_active,
+            created_at
+        FROM feeds
+        ORDER BY created_at;
+    " 2>/dev/null || print_error "Failed to query feeds"
+    
+    # Check feed items
+    print_status "🔗 Feed items:"
+    local feed_item_count=$(psql -d mterenzi -tAc "SELECT COUNT(*) FROM feed_items;" 2>/dev/null || echo "0")
+    echo "Total feed items: $feed_item_count"
+    
+    if [ "$feed_item_count" -gt 0 ]; then
+        psql -d mterenzi -c "
+            SELECT 
+                fi.id,
+                f.name as feed_name,
+                LEFT(a.title, 50) as article_title,
+                fi.score,
+                fi.created_at
+            FROM feed_items fi
+            JOIN feeds f ON fi.feed_id = f.id
+            JOIN articles a ON fi.article_id = a.id
+            ORDER BY fi.created_at DESC
+            LIMIT 3;
+        " 2>/dev/null || print_error "Failed to query feed items"
+    else
+        print_warning "No feed items found - this explains empty feeds!"
+    fi
+    
+    # Test API endpoints
+    print_status "🌐 API endpoint tests:"
+    
+    # Test global feed
+    local global_response=$(curl -s http://localhost:$PORT/api/feeds/global)
+    if [ $? -eq 0 ]; then
+        local feed_count=$(echo "$global_response" | jq -r '.data | length' 2>/dev/null || echo "0")
+        echo "Global feed items: $feed_count"
+        
+        if [ "$feed_count" -eq 0 ]; then
+            echo "Global feed response:"
+            echo "$global_response" | jq '.' 2>/dev/null || echo "$global_response"
+        fi
+    else
+        print_error "Failed to call global feed API"
+    fi
+    
+    # Check if feeds need to be created/regenerated
+    print_status "🔧 Diagnosis:"
+    local article_count=$(psql -d mterenzi -tAc "SELECT COUNT(*) FROM articles;" 2>/dev/null || echo "0")
+    local feed_count=$(psql -d mterenzi -tAc "SELECT COUNT(*) FROM feeds;" 2>/dev/null || echo "0")
+    local feed_item_count=$(psql -d mterenzi -tAc "SELECT COUNT(*) FROM feed_items;" 2>/dev/null || echo "0")
+    
+    if [ "$article_count" -gt 0 ] && [ "$feed_item_count" -eq 0 ]; then
+        print_warning "Articles exist but no feed items - feeds need to be generated!"
+        echo "💡 Try running: $0 regenerate-feeds"
+    elif [ "$feed_count" -eq 0 ]; then
+        print_warning "No feeds configured - basic feeds need to be created!"
+        echo "💡 Try running: $0 setup-feeds"
+    else
+        print_success "Database structure looks OK - issue might be in feed generation logic"
+    fi
+}
+
+# Function to setup basic feeds
+setup_feeds() {
+    print_status "🔧 Setting up basic feeds..."
+    cd "$PROJECT_ROOT"
+    
+    # Create a setup script for feeds
+    cat > cmd/setup_feeds.go << 'EOF'
+package main
+
+import (
+    "log"
+    "os"
+
+    "github.com/google/uuid"
+    "github.com/mterenzi/open-news/internal/config"
+    "github.com/mterenzi/open-news/internal/database"
+    "github.com/mterenzi/open-news/internal/models"
+)
+
+func main() {
+    cfg := config.Load()
+
+    db, err := database.Connect(cfg.DatabaseURL)
+    if err != nil {
+        log.Fatalf("Failed to connect to database: %v", err)
+    }
+
+    // Create global feed if it doesn't exist
+    var globalFeed models.Feed
+    result := db.Where("feed_type = ? AND name = ?", "global", "Global").First(&globalFeed)
+
+    if result.Error != nil {
+        log.Println("📡 Creating global feed...")
+        globalFeed = models.Feed{
+            ID:       uuid.New(),
+            FeedType: "global",
+            Name:     "Global",
+            IsActive: true,
+        }
+
+        if err := db.Create(&globalFeed).Error; err != nil {
+            log.Fatalf("Failed to create global feed: %v", err)
+        }
+        log.Println("✅ Global feed created")
+    } else {
+        log.Println("✅ Global feed already exists")
+    }
+
+    log.Println("🎉 Feed setup complete!")
+}
+EOF
+
+    if go run cmd/setup_feeds.go; then
+        print_success "Feeds setup completed"
+    else
+        print_error "Failed to setup feeds"
+    fi
+}
+
+# Function to regenerate feeds
+regenerate_feeds() {
+    print_status "🔄 Regenerating feeds..."
+    cd "$PROJECT_ROOT"
+    
+    if [ -f "scripts/regenerate-global-feed.sh" ]; then
+        if ./scripts/regenerate-global-feed.sh; then
+            print_success "Feeds regenerated successfully"
+        else
+            print_error "Failed to regenerate feeds"
+        fi
+    else
+        print_error "Regenerate script not found at scripts/regenerate-global-feed.sh"
+    fi
+}
+
+# Function to update quality scores
+update_quality() {
+    print_status "📊 Updating quality scores..."
+    cd "$PROJECT_ROOT"
+    
+    if [ -f "scripts/update-quality-scores.sh" ]; then
+        if ./scripts/update-quality-scores.sh; then
+            print_success "Quality scores updated successfully"
+        else
+            print_error "Failed to update quality scores"
+        fi
+    else
+        print_error "Quality score script not found at scripts/update-quality-scores.sh"
+    fi
+}
+
+# Function to seed articles
+seed_articles() {
+    print_status "Seeding articles..."
+    cd "$PROJECT_ROOT"
+    
+    # Check if we have sources first
+    local source_count=$(psql -d mterenzi -tAc "SELECT COUNT(*) FROM sources;" 2>/dev/null || echo "0")
+    if [ "$source_count" -eq 0 ]; then
+        print_warning "No sources found. Seeding sources first..."
+        if ! go run cmd/seed.go; then
+            print_error "Failed to seed sources"
+            exit 1
+        fi
+    fi
+    
+    # Seed only articles
+    if go run cmd/seed.go -articles-only; then
+        print_success "Articles seeded successfully"
+        
+        # Auto-regenerate feeds after seeding articles
+        print_status "Auto-regenerating feeds..."
+        if regenerate_feeds; then
+            print_success "Feeds updated with new articles"
+        else
+            print_warning "Feed regeneration failed, but articles were seeded"
+        fi
+    else
+        print_error "Failed to seed articles"
+        exit 1
+    fi
+}
+
+# Function to seed database
+seed_database() {
+    print_status "Seeding database..."
+    cd "$PROJECT_ROOT"
+    
+    if go run cmd/seed.go "$@"; then
+        print_success "Database seeded successfully"
+    else
+        print_error "Failed to seed database"
+        exit 1
+    fi
+}
+
+# Function to reset database
+reset_database() {
+    print_warning "This will completely reset the database and delete all data!"
+    echo -n "Are you sure? (y/N): "
+    read -r confirmation
+    
+    if [[ "$confirmation" =~ ^[Yy]$ ]]; then
+        print_status "Resetting database..."
+        cd "$PROJECT_ROOT"
+        
+        # Drop and recreate database tables
+        psql -d mterenzi -c "
+            DROP TABLE IF EXISTS user_feed_preferences CASCADE;
+            DROP TABLE IF EXISTS feed_items CASCADE;
+            DROP TABLE IF EXISTS feeds CASCADE;
+            DROP TABLE IF EXISTS user_sources CASCADE;
+            DROP TABLE IF EXISTS sources CASCADE;
+            DROP TABLE IF EXISTS articles CASCADE;
+            DROP TABLE IF EXISTS users CASCADE;
+        " 2>/dev/null || true
+        
+        print_success "Database tables dropped"
+        
+        # Run migrations to recreate tables
+        print_status "Running migrations..."
+        if go run cmd/migrate.go; then
+            print_success "Database reset complete"
+            
+            # Ask if they want to seed
+            echo -n "Would you like to seed the database now? (Y/n): "
+            read -r seed_confirmation
+            
+            if [[ ! "$seed_confirmation" =~ ^[Nn]$ ]]; then
+                seed_database
+            fi
+        else
+            print_error "Failed to run migrations"
+            exit 1
+        fi
+    else
+        print_status "Database reset cancelled"
+    fi
+}
+
+# Function to show help
+show_help() {
+    echo "Open News Development Server Manager"
+    echo ""
+    echo "Usage: $0 <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  start              Start the server"
+    echo "  stop               Stop the server"
+    echo "  restart            Restart the server"
+    echo "  status             Show server status"
+    echo "  logs               Show server logs (tail -f)"
+    echo "  test               Test API endpoints"
+    echo "  seed               Seed the database with users and sources"
+    echo "  articles           Seed articles only (requires existing sources)"
+    echo "  debug              Debug feeds and articles"
+    echo "  setup-feeds        Setup basic feed configuration"
+    echo "  regenerate-feeds   Regenerate all feeds"
+    echo "  update-quality     Update quality scores for all articles"
+    echo "  reset              Reset database (⚠️  DELETES ALL DATA)"
+    echo "  help               Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 restart                    # Restart server"
+    echo "  $0 reset                      # Reset database completely"
+    echo "  $0 seed                       # Seed with default user and sources"
+    echo "  $0 seed -handle user.bsky.social  # Seed with custom user"
+    echo "  $0 articles                   # Seed articles only"
+    echo "  $0 debug                      # Debug why feeds are empty"
+    echo "  $0 setup-feeds                # Setup basic feeds"
+    echo "  $0 regenerate-feeds           # Force regenerate feeds"
+    echo "  $0 update-quality            # Update article quality scores"
+    echo "  $0 logs                       # Follow server logs"
+    echo ""
+    echo "Environment Variables:"
+    echo "  PORT=8080                     # Server port (default: 8080)"
+    echo ""
+    echo "Quick Development Workflow:"
+    echo "  1. $0 restart                 # Start/restart server"
+    echo "  2. $0 seed                    # Seed database with users and sources"
+    echo "  3. $0 articles                # Seed articles for testing"
+    echo "  4. $0 setup-feeds             # Setup feed configuration"
+    echo "  5. $0 regenerate-feeds        # Generate feed items"
+    echo "  6. $0 update-quality          # Update quality scores"
+    echo "  7. $0 debug                   # Verify everything works"
+    echo "  8. Open http://localhost:$PORT    # Access dashboard"
+    echo "  9. $0 logs                    # Monitor logs"
+}
+
+# Main command handling
+case "${1:-help}" in
+    "start")
+        start_server
+        ;;
+    "stop")
+        stop_server
+        ;;
+    "restart")
+        restart_server
+        ;;
+    "status")
+        show_status
+        ;;
+    "logs")
+        show_logs
+        ;;
+    "test")
+        test_api
+        ;;
+    "seed")
+        shift
+        seed_database "$@"
+        ;;
+    "articles")
+        seed_articles
+        ;;
+    "debug")
+        debug_feeds
+        ;;
+    "setup-feeds")
+        setup_feeds
+        ;;
+    "regenerate-feeds")
+        regenerate_feeds
+        ;;
+    "update-quality")
+        update_quality
+        ;;
+    "reset")
+        reset_database
+        ;;
+    "help"|"--help"|"-h")
+        show_help
+        ;;
+    *)
+        print_error "Unknown command: $1"
+        echo ""
+        show_help
+esac

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open News Widget Examples</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 2rem;
+            background: #f8fafc;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #1e293b;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .widget-demo {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+        .widget-demo h2 {
+            color: #3b82f6;
+            margin-bottom: 1rem;
+        }
+        .widget-demo p {
+            color: #64748b;
+            margin-bottom: 1.5rem;
+        }
+        .widget-container {
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+        }
+        iframe {
+            width: 100%;
+            height: 400px;
+            border: none;
+            display: block;
+        }
+        .code-block {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.875rem;
+            overflow-x: auto;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌍 Open News Widget Examples</h1>
+        
+        <div class="widget-demo">
+            <h2>Global Feed Widget</h2>
+            <p>Embed the global news feed on any website. This widget shows the latest articles from all sources.</p>
+            <div class="widget-container">
+                <iframe src="/widget/global?limit=5&compact=true"></iframe>
+            </div>
+            <p><strong>Embed Code:</strong></p>
+            <div class="code-block">
+&lt;iframe src="http://localhost:8080/widget/global" 
+        width="100%" 
+        height="400" 
+        frameborder="0"&gt;
+&lt;/iframe&gt;
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="widget-demo">
+                <h2>Compact Global Feed</h2>
+                <p>A more compact version perfect for sidebars.</p>
+                <div class="widget-container">
+                    <iframe src="/widget/global?limit=3&compact=true" style="height: 300px;"></iframe>
+                </div>
+                <div class="code-block">
+&lt;iframe src="http://localhost:8080/widget/global?compact=true&amp;limit=3" 
+        width="100%" 
+        height="300" 
+        frameborder="0"&gt;
+&lt;/iframe&gt;
+                </div>
+            </div>
+
+            <div class="widget-demo">
+                <h2>Dark Theme Widget</h2>
+                <p>A dark-themed version for dark websites.</p>
+                <div class="widget-container">
+                    <iframe src="/widget/global?theme=dark&limit=3&compact=true" style="height: 300px;"></iframe>
+                </div>
+                <div class="code-block">
+&lt;iframe src="http://localhost:8080/widget/global?theme=dark&amp;compact=true&amp;limit=3" 
+        width="100%" 
+        height="300" 
+        frameborder="0"&gt;
+&lt;/iframe&gt;
+                </div>
+            </div>
+        </div>
+
+        <div class="widget-demo">
+            <h2>Personal Feed Widget</h2>
+            <p>Show a personalized feed for a specific Bluesky user. Replace 'bsky.app' with any valid handle.</p>
+            <div class="widget-container">
+                <iframe src="/widget/personal?user=bsky.app&limit=5&compact=true"></iframe>
+            </div>
+            <p><strong>Embed Code:</strong></p>
+            <div class="code-block">
+&lt;iframe src="http://localhost:8080/widget/personal?user=YOUR_HANDLE_HERE" 
+        width="100%" 
+        height="400" 
+        frameborder="0"&gt;
+&lt;/iframe&gt;
+            </div>
+        </div>
+
+        <div class="widget-demo">
+            <h2>Customization Options</h2>
+            <p>You can customize the widgets using URL parameters:</p>
+            <ul>
+                <li><code>theme=dark</code> - Use dark theme</li>
+                <li><code>limit=10</code> - Number of articles (1-100, default: 20)</li>
+                <li><code>compact=true</code> - Use compact layout</li>
+                <li><code>autorefresh=300</code> - Auto-refresh interval in seconds (min: 60)</li>
+                <li><code>user=handle.bsky.social</code> - Specific user for personal feeds</li>
+            </ul>
+            <p><strong>Example with all options:</strong></p>
+            <div class="code-block">
+&lt;iframe src="http://localhost:8080/widget/global?theme=dark&amp;limit=5&amp;compact=true&amp;autorefresh=300" 
+        width="100%" 
+        height="400" 
+        frameborder="0"&gt;
+&lt;/iframe&gt;
+            </div>
+        </div>
+
+        <div class="widget-demo">
+            <h2>Usage Instructions</h2>
+            <p>To embed these widgets on your website:</p>
+            <ol>
+                <li>Copy the embed code from any example above</li>
+                <li>Replace <code>localhost:8080</code> with your Open News server URL</li>
+                <li>Adjust the <code>width</code> and <code>height</code> attributes as needed</li>
+                <li>Customize using the URL parameters listed above</li>
+                <li>Paste the code into your HTML where you want the feed to appear</li>
+            </ol>
+            <p><strong>For WordPress, Squarespace, or other CMS:</strong> Use the HTML/Custom Code block to insert the iframe code.</p>
+        </div>
+    </div>
+</body>
+</html>

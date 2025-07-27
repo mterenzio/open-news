@@ -1,0 +1,39 @@
+# Multi-stage build for production
+FROM golang:1.23-alpine AS builder
+
+# Install necessary packages
+RUN apk --no-cache add ca-certificates git
+
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the application with security flags
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static" -s -w' -o main cmd/main.go
+
+# Final stage - use distroless for security
+FROM gcr.io/distroless/static:nonroot
+
+WORKDIR /
+
+# Copy the binary from builder stage
+COPY --from=builder /app/main .
+
+# Copy static files (for DID document)
+COPY --from=builder /app/static ./static
+
+# Use nonroot user from distroless
+USER nonroot:nonroot
+
+# Expose port
+EXPOSE 8080
+
+# Run the application
+ENTRYPOINT ["./main", "server"]

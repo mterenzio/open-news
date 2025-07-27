@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open News Feed</title>
+    <script src="https://unpkg.com/htmx.org@2.0.2"></script>
+    <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+    <link rel="stylesheet" href="/static/feed.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav-bar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <i class="fas fa-newspaper"></i>
+                <span>Open News</span>
+            </div>
+            <div class="nav-links">
+                <button class="nav-link active" 
+                        hx-get="/feed/global"
+                        hx-target="#feed-container"
+                        hx-indicator="#loading">
+                    <i class="fas fa-globe"></i> Global Feed
+                </button>
+                <button class="nav-link" 
+                        onclick="showPersonalizedFeedModal()">
+                    <i class="fas fa-user"></i> Personal Feed
+                </button>
+                <button class="nav-link" 
+                        onclick="showEmbedModal()">
+                    <i class="fas fa-code"></i> Embed
+                </button>
+                <a href="/" class="nav-link">
+                    <i class="fas fa-home"></i> Dashboard
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Loading indicator -->
+        <div id="loading" class="loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <span>Loading feed...</span>
+        </div>
+
+        <!-- Feed Container -->
+        <div id="feed-container" 
+             hx-get="/feed/global" 
+             hx-trigger="load"
+             hx-indicator="#loading">
+            <!-- Feed content will be loaded here -->
+        </div>
+    </main>
+
+    <!-- Personalized Feed Modal -->
+    <div id="personalizedModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-user"></i> Personal Feed</h2>
+                <button class="close-btn" onclick="closeModal('personalizedModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>Enter a Bluesky user handle to view their personalized feed:</p>
+                <form id="personalFeedForm" onsubmit="loadPersonalFeed(event)">
+                    <div class="input-group">
+                        <input type="text" 
+                               id="userHandle" 
+                               placeholder="user.bsky.social or did:plc:..." 
+                               required>
+                        <button type="submit">
+                            <i class="fas fa-search"></i> Load Feed
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Embed Code Modal -->
+    <div id="embedModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-code"></i> Embed Open News Feed</h2>
+                <button class="close-btn" onclick="closeModal('embedModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="embed-section">
+                    <h3>Global Feed Widget</h3>
+                    <p>Copy this code to embed the global feed on your website:</p>
+                    <div class="code-block">
+                        <code id="globalEmbedCode">&lt;iframe src="${window.location.origin}/widget/global" width="100%" height="600" frameborder="0"&gt;&lt;/iframe&gt;</code>
+                        <button class="copy-btn" onclick="copyEmbedCode('globalEmbedCode')">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="embed-section">
+                    <h3>Personal Feed Widget</h3>
+                    <p>Enter a user handle for a personalized feed widget:</p>
+                    <div class="input-group">
+                        <input type="text" 
+                               id="embedUserHandle" 
+                               placeholder="user.bsky.social"
+                               onchange="updatePersonalEmbedCode()">
+                    </div>
+                    <div class="code-block">
+                        <code id="personalEmbedCode">&lt;iframe src="${window.location.origin}/widget/personal?user=USER_HANDLE" width="100%" height="600" frameborder="0"&gt;&lt;/iframe&gt;</code>
+                        <button class="copy-btn" onclick="copyEmbedCode('personalEmbedCode')">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                </div>
+
+                <div class="embed-section">
+                    <h3>Customization Options</h3>
+                    <p>You can customize the widget appearance with URL parameters:</p>
+                    <ul>
+                        <li><code>theme=dark</code> - Dark theme</li>
+                        <li><code>limit=10</code> - Number of articles (default: 20, max: 100)</li>
+                        <li><code>compact=true</code> - Compact layout</li>
+                        <li><code>autorefresh=300</code> - Auto-refresh interval in seconds</li>
+                    </ul>
+                    <p><strong>Example:</strong></p>
+                    <div class="code-block">
+                        <code>&lt;iframe src="${window.location.origin}/widget/global?theme=dark&amp;limit=10&amp;compact=true" width="100%" height="600" frameborder="0"&gt;&lt;/iframe&gt;</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Modal functionality
+        function showPersonalizedFeedModal() {
+            document.getElementById('personalizedModal').style.display = 'flex';
+        }
+
+        function showEmbedModal() {
+            document.getElementById('embedModal').style.display = 'flex';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        }
+
+        // Load personal feed
+        function loadPersonalFeed(event) {
+            event.preventDefault();
+            const userHandle = document.getElementById('userHandle').value.trim();
+            if (!userHandle) return;
+
+            // Update nav state
+            document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+            
+            // Load personal feed
+            htmx.ajax('GET', `/feed/personal?user=${encodeURIComponent(userHandle)}`, {
+                target: '#feed-container',
+                indicator: '#loading'
+            });
+
+            closeModal('personalizedModal');
+        }
+
+        // Update nav state
+        document.addEventListener('htmx:beforeRequest', function(event) {
+            if (event.target.classList.contains('nav-link')) {
+                document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+                event.target.classList.add('active');
+            }
+        });
+
+        // Embed code functionality
+        function updatePersonalEmbedCode() {
+            const userHandle = document.getElementById('embedUserHandle').value.trim();
+            const codeElement = document.getElementById('personalEmbedCode');
+            
+            if (userHandle) {
+                codeElement.textContent = `<iframe src="${window.location.origin}/widget/personal?user=${encodeURIComponent(userHandle)}" width="100%" height="600" frameborder="0"></iframe>`;
+            } else {
+                codeElement.textContent = `<iframe src="${window.location.origin}/widget/personal?user=USER_HANDLE" width="100%" height="600" frameborder="0"></iframe>`;
+            }
+        }
+
+        function copyEmbedCode(elementId) {
+            const code = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                const btn = event.target.closest('.copy-btn');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                btn.style.background = 'var(--success-color)';
+                
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.style.background = '';
+                }, 2000);
+            });
+        }
+
+        // Auto-refresh functionality
+        let autoRefreshInterval;
+        
+        function startAutoRefresh(seconds = 300) {
+            stopAutoRefresh();
+            autoRefreshInterval = setInterval(() => {
+                const activeContainer = document.getElementById('feed-container');
+                if (activeContainer && activeContainer.getAttribute('hx-get')) {
+                    htmx.trigger(activeContainer, 'refresh');
+                }
+            }, seconds * 1000);
+        }
+
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+
+        // Start auto-refresh by default (5 minutes)
+        startAutoRefresh(300);
+
+        // Initialize embed code
+        document.addEventListener('DOMContentLoaded', function() {
+            updatePersonalEmbedCode();
+        });
+    </script>
+</body>
+</html>
