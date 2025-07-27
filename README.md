@@ -1,6 +1,8 @@
-# Open News - Digg Clone for Bluesky
+# open.news - Social News Aggregation Platform
 
-Open News is a social news sharing application built on top of Bluesky, similar to Digg. It aggregates and ranks articles shared by users on Bluesky based on engagement metrics like reposts and likes.
+# open.news - Social News Aggregation Platform
+
+open.news is an advanced social news aggregation platform built on top of Bluesky. It intelligently aggregates, ranks, and curates articles shared across the Bluesky network using sophisticated quality scoring algorithms and engagement metrics.
 
 ## Features
 

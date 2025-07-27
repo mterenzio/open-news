@@ -1,4 +1,4 @@
-# 🚀 Production Deployment Guide for Open News Bluesky Custom Feeds
+# 🚀 Production Deployment Guide for open.news Bluesky Custom Feeds
 
 ## Prerequisites Checklist
 

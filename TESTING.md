@@ -1,6 +1,6 @@
 # Testing Guide
 
-This guide provides comprehensive testing commands and procedures for the Open News application.
+This guide provides comprehensive testing commands and procedures for the open.news application.
 
 ## Quick Test Commands
 

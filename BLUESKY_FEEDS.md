@@ -2,14 +2,14 @@
 
 ## Overview
 
-Your Open News application now supports **Bluesky Custom Feeds**! This allows users to discover your feeds through Bluesky's official interface and automatically creates user accounts based on their Bluesky follows.
+Your open.news application now supports **Bluesky Custom Feeds**! This allows users to discover your feeds through Bluesky's official interface and automatically creates user accounts based on their Bluesky follows.
 
 ## 🎯 What You've Built
 
 ### Two Custom Feeds
 
-1. **Open News - Global**: Top stories from across the Bluesky network, ranked by engagement and quality
-2. **Open News - Personal**: Personalized news feed based on accounts the user follows on Bluesky
+1. **open.news - Global**: Top stories from across the Bluesky network, ranked by engagement and quality
+2. **open.news - Personal**: Personalized news feed based on accounts the user follows on Bluesky
 
 ### Automatic User Onboarding
 
@@ -75,7 +75,7 @@ GET /xrpc/app.bsky.feed.describeFeedGenerator?feed={FEED_URI}
 ```json
 {
   "uri": "at://did:plc:your-did/app.bsky.feed.generator/open-news-global",
-  "displayName": "Open News - Global",
+  "displayName": "open.news - Global",
   "description": "Top stories from across the Bluesky network, ranked by engagement and quality.",
   "avatar": "https://your-domain.com/feed-avatar.jpg",
   "createdBy": "did:plc:your-feed-generator-did"
@@ -100,7 +100,7 @@ You need to publish a feed generator record to the AT Protocol network. Here's t
    const feedRecord = {
      "$type": "app.bsky.feed.generator",
      "did": "did:web:your-domain.com",
-     "displayName": "Open News - Global",
+     "displayName": "open.news - Global",
      "description": "Top stories from across the Bluesky network",
      "avatar": "https://your-domain.com/feed-avatar.jpg",
      "createdAt": new Date().toISOString()

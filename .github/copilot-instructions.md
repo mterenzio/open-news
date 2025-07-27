@@ -1,8 +1,8 @@
 <!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
 
-# Open News - Copilot Instructions
+# open.news - Copilot Instructions
 
-This is a Go project for a social news sharing application similar to Digg, built on top of Bluesky. The application aggregates and ranks articles shared by users on Bluesky.
+This is a Go project for an advanced social news aggregation platform built on top of Bluesky. The application intelligently aggregates, ranks, and curates articles shared across the Bluesky network using sophisticated quality scoring algorithms.
 
 ## Project Context
 
