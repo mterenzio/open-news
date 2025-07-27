@@ -129,7 +129,7 @@ func (h *AdminHandler) generateAdminDashboardHTML(userCount, sourceCount, articl
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Open News Admin</title>
+    <title>open.news Admin</title>
     <link rel="stylesheet" href="/static/feed.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -210,7 +210,7 @@ func (h *AdminHandler) generateAdminDashboardHTML(userCount, sourceCount, articl
     <nav class="admin-nav">
         <div class="nav-container">
             <div class="nav-brand">
-                <i class="fas fa-shield-alt"></i> Open News Admin
+                <i class="fas fa-shield-alt"></i> open.news Admin
             </div>
             <div class="nav-links">
                 <a href="/admin" class="nav-link active">Dashboard</a>
@@ -469,7 +469,7 @@ func (h *AdminHandler) generateAdminLayout(title, activePath string) string {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>` + title + ` - Open News Admin</title>
+    <title>` + title + ` - open.news Admin</title>
     <link rel="stylesheet" href="/static/feed.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -514,7 +514,7 @@ func (h *AdminHandler) generateAdminLayout(title, activePath string) string {
     <nav class="admin-nav">
         <div class="nav-container">
             <div class="nav-brand">
-                <i class="fas fa-shield-alt"></i> Open News Admin
+                <i class="fas fa-shield-alt"></i> open.news Admin
             </div>
             <div class="nav-links">
                 <a href="/admin" class="nav-link` + h.getActiveClass("/admin", activePath) + `">Dashboard</a>
