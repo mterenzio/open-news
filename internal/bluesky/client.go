@@ -26,14 +26,14 @@ type Session struct {
 
 // Post represents a Bluesky post
 type Post struct {
-	URI       string    `json:"uri"`
-	CID       string    `json:"cid"`
-	Author    Author    `json:"author"`
-	Record    Record    `json:"record"`
-	ReplyCount int      `json:"replyCount"`
-	RepostCount int     `json:"repostCount"`
-	LikeCount  int      `json:"likeCount"`
-	IndexedAt  time.Time `json:"indexedAt"`
+	URI         string    `json:"uri"`
+	CID         string    `json:"cid"`
+	Author      Author    `json:"author"`
+	Record      Record    `json:"record"`
+	ReplyCount  int       `json:"replyCount"`
+	RepostCount int       `json:"repostCount"`
+	LikeCount   int       `json:"likeCount"`
+	IndexedAt   time.Time `json:"indexedAt"`
 }
 
 // Author represents a post author
@@ -46,17 +46,17 @@ type Author struct {
 
 // Record represents the content of a post
 type Record struct {
-	Type      string     `json:"$type"`
-	Text      string     `json:"text"`
-	CreatedAt time.Time  `json:"createdAt"`
-	Facets    []Facet    `json:"facets,omitempty"`
-	Embed     *Embed     `json:"embed,omitempty"`
+	Type      string    `json:"$type"`
+	Text      string    `json:"text"`
+	CreatedAt time.Time `json:"createdAt"`
+	Facets    []Facet   `json:"facets,omitempty"`
+	Embed     *Embed    `json:"embed,omitempty"`
 }
 
 // Facet represents a facet in a post (links, mentions, etc.)
 type Facet struct {
-	Index    ByteSlice   `json:"index"`
-	Features []Feature   `json:"features"`
+	Index    ByteSlice `json:"index"`
+	Features []Feature `json:"features"`
 }
 
 // ByteSlice represents a byte range
@@ -75,9 +75,9 @@ type Feature struct {
 
 // Embed represents embedded content in a post
 type Embed struct {
-	Type     string          `json:"$type"`
-	External *ExternalEmbed  `json:"external,omitempty"`
-	Images   []ImageEmbed    `json:"images,omitempty"`
+	Type     string         `json:"$type"`
+	External *ExternalEmbed `json:"external,omitempty"`
+	Images   []ImageEmbed   `json:"images,omitempty"`
 }
 
 // ExternalEmbed represents an external link embed
