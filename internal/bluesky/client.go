@@ -338,3 +338,71 @@ func (c *Client) ResolveHandle(handle string) (string, error) {
 	
 	return result.DID, nil
 }
+
+// AuthorFeedResponse represents the response from getAuthorFeed
+type AuthorFeedResponse struct {
+	Feed   []Post `json:"feed"`
+	Cursor string `json:"cursor,omitempty"`
+}
+
+// GetAuthorFeed retrieves posts from a specific author
+func (c *Client) GetAuthorFeed(actor string, limit int, cursor string) ([]Post, error) {
+	if c.session == nil {
+		return nil, fmt.Errorf("not authenticated")
+	}
+
+	url := fmt.Sprintf("%s/xrpc/app.bsky.feed.getAuthorFeed?actor=%s&limit=%d", c.baseURL, actor, limit)
+	if cursor != "" {
+		url += "&cursor=" + cursor
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.session.AccessJWT)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get author feed: %s", resp.Status)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var response AuthorFeedResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
+
+	return response.Feed, nil
+}
+
+// ExtractLinksFromPost extracts all links from a Bluesky post
+func (c *Client) ExtractLinksFromPost(post Post) []string {
+	var links []string
+	
+	// Check for external embed
+	if post.Record.Embed != nil && post.Record.Embed.External != nil {
+		links = append(links, post.Record.Embed.External.URI)
+	}
+	
+	// Check for facets (inline links)
+	for _, facet := range post.Record.Facets {
+		for _, feature := range facet.Features {
+			if feature.Type == "app.bsky.richtext.facet#link" && feature.URI != "" {
+				links = append(links, feature.URI)
+			}
+		}
+	}
+	
+	return links
+}

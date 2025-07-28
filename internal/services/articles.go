@@ -13,6 +13,31 @@ import (
 	"gorm.io/gorm"
 )
 
+// canonicalizeURL removes tracking parameters and other noise to create a canonical URL
+func canonicalizeURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL // Return original if parsing fails
+	}
+	
+	// Remove common tracking and variant parameters
+	query := parsed.Query()
+	
+	// List of parameters to remove for canonicalization
+	paramsToRemove := []string{
+		"variant", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+		"fbclid", "gclid", "msclkid", "ref", "source", "campaign",
+		"_ga", "_gl", "mc_cid", "mc_eid", "yclid",
+	}
+	
+	for _, param := range paramsToRemove {
+		query.Del(param)
+	}
+	
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
+}
+
 // ArticlesService handles article import and seeding
 type ArticlesService struct {
 	db            *gorm.DB
@@ -39,17 +64,22 @@ type ArticleSeedConfig struct {
 func (as *ArticlesService) ImportArticlesFromSources(config ArticleSeedConfig) error {
 	log.Printf("🔄 Starting article import from Bluesky sources...")
 	
-	// Get active sources from database
+	// Get sources that users actually follow (from user_sources table)
 	var sources []models.Source
-	if err := as.db.Limit(config.SampleSources).Find(&sources).Error; err != nil {
-		return fmt.Errorf("failed to fetch sources: %w", err)
+	query := `
+		SELECT DISTINCT s.* FROM sources s 
+		INNER JOIN user_sources us ON s.id = us.source_id 
+		LIMIT ?
+	`
+	if err := as.db.Raw(query, config.SampleSources).Scan(&sources).Error; err != nil {
+		return fmt.Errorf("failed to fetch user-followed sources: %w", err)
 	}
 	
 	if len(sources) == 0 {
-		return fmt.Errorf("no sources found in database")
+		return fmt.Errorf("no user-followed sources found in database")
 	}
 	
-	log.Printf("📚 Attempting to import articles from %d sources...", len(sources))
+	log.Printf("📚 Attempting to import articles from %d user-followed sources...", len(sources))
 	
 	articlesCreated := 0
 	for _, source := range sources {
@@ -82,10 +112,76 @@ func (as *ArticlesService) ImportArticlesFromSources(config ArticleSeedConfig) e
 
 // importFromSource tries to import articles from a specific source
 func (as *ArticlesService) importFromSource(source models.Source, config ArticleSeedConfig) error {
-	// Note: This would use the Bluesky API to get recent posts from the source
-	// For now, we'll return an error since we don't have authentication
-	// In production, this would call as.blueskyClient.GetRecentPosts(source.BlueSkyDID)
-	return fmt.Errorf("authentication required for Bluesky API")
+	if as.blueskyClient == nil {
+		return fmt.Errorf("authentication required for Bluesky API")
+	}
+
+	log.Printf("📡 Importing articles from %s (%s)...", source.DisplayName, source.Handle)
+	log.Printf("🔍 Getting posts from DID: %s", source.BlueSkyDID)
+	
+	// Get recent posts from this author
+	posts, err := as.blueskyClient.GetAuthorFeed(source.BlueSkyDID, 20, "")
+	if err != nil {
+		log.Printf("❌ Failed to get posts from %s: %v", source.Handle, err)
+		return fmt.Errorf("failed to get posts from %s: %w", source.Handle, err)
+	}
+
+	log.Printf("📊 Retrieved %d posts from %s", len(posts), source.Handle)
+
+	articlesCreated := 0
+	for i, post := range posts {
+		log.Printf("🔍 Processing post %d: %s", i+1, post.URI)
+		
+		// Extract links from the post
+		links := as.blueskyClient.ExtractLinksFromPost(post)
+		log.Printf("🔗 Found %d links in post: %v", len(links), links)
+		
+		for _, link := range links {
+			log.Printf("📰 Creating article for link: %s", link)
+			
+			// Create article from the link
+			article := models.Article{
+				Title:       extractTitleFromPost(post.Record.Text, link),
+				URL:         canonicalizeURL(link),
+				PublishedAt: &post.Record.CreatedAt,
+				Description: truncateText(post.Record.Text, 500),
+			}
+
+			// Try to create the article (will be skipped if canonical URL already exists)
+			if err := as.db.Where("url = ?", article.URL).FirstOrCreate(&article).Error; err != nil {
+				log.Printf("⚠️ Failed to create article %s: %v", article.URL, err)
+				continue
+			}
+
+			// Create source article linking this post to the article
+			sourceArticle := models.SourceArticle{
+				SourceID:  source.ID,
+				ArticleID: article.ID,
+				PostURI:   post.URI,
+				PostCID:   post.CID,
+				PostText:  post.Record.Text,
+				PostedAt:  post.Record.CreatedAt,
+			}
+
+			if err := as.db.Create(&sourceArticle).Error; err != nil {
+				log.Printf("⚠️ Failed to create source article for %s: %v", article.URL, err)
+				continue
+			}
+
+			log.Printf("✅ Successfully created article: %s", article.Title)
+			articlesCreated++
+			if articlesCreated >= config.MaxArticles {
+				break
+			}
+		}
+		
+		if articlesCreated >= config.MaxArticles {
+			break
+		}
+	}
+
+	log.Printf("✅ Imported %d articles from %s", articlesCreated, source.DisplayName)
+	return nil
 }
 
 // CreateMockArticles creates realistic mock articles for development/testing
@@ -113,9 +209,36 @@ func (as *ArticlesService) CreateMockArticles(config ArticleSeedConfig) error {
 		// Select a source for this article (round-robin)
 		source := sources[i%len(sources)]
 		
-		// Create the article
+		// Canonicalize the URL
+		canonicalURL := canonicalizeURL(articleData.URL)
+		
+		// Check if article already exists (using canonical URL)
+		var existing models.Article
+		if err := as.db.Where("url = ?", canonicalURL).First(&existing).Error; err == nil {
+			// Article exists, create source article link with existing article
+			sourceArticle := models.SourceArticle{
+				SourceID:     source.ID,
+				ArticleID:    existing.ID,
+				PostURI:      fmt.Sprintf("at://%s/app.bsky.feed.post/mock-%d", source.BlueSkyDID, time.Now().Unix()+int64(i)),
+				PostCID:      fmt.Sprintf("bafyrei-mock-%d", time.Now().Unix()+int64(i)),
+				PostText:     fmt.Sprintf("%s %s", articleData.PostText, articleData.URL), // Use original URL in post text
+				IsRepost:     articleData.IsRepost,
+				PostedAt:     articleData.PublishedAt.Add(-time.Duration(i) * time.Hour),
+				LikesCount:   articleData.LikesCount,
+				RepostsCount: articleData.RepostsCount,
+				RepliesCount: articleData.RepliesCount,
+				ShareScore:   articleData.ShareScore,
+			}
+			
+			if err := as.db.Create(&sourceArticle).Error; err != nil {
+				log.Printf("❌ Failed to create source article: %v", err)
+			}
+			continue // Skip creating new article, but we created the source article link
+		}
+		
+		// Create the article with canonical URL
 		article := models.Article{
-			URL:           articleData.URL,
+			URL:           canonicalURL,
 			Title:         articleData.Title,
 			Description:   articleData.Description,
 			Author:        articleData.Author,
@@ -130,12 +253,6 @@ func (as *ArticlesService) CreateMockArticles(config ArticleSeedConfig) error {
 			IsCached:      false, // Will be cached by workers if needed
 		}
 		
-		// Check if article already exists
-		var existing models.Article
-		if err := as.db.Where("url = ?", article.URL).First(&existing).Error; err == nil {
-			continue // Article already exists
-		}
-		
 		if err := as.db.Create(&article).Error; err != nil {
 			log.Printf("❌ Failed to create article: %v", err)
 			continue
@@ -147,7 +264,7 @@ func (as *ArticlesService) CreateMockArticles(config ArticleSeedConfig) error {
 			ArticleID:    article.ID,
 			PostURI:      fmt.Sprintf("at://%s/app.bsky.feed.post/mock-%d", source.BlueSkyDID, time.Now().Unix()+int64(i)),
 			PostCID:      fmt.Sprintf("bafyrei-mock-%d", time.Now().Unix()+int64(i)),
-			PostText:     fmt.Sprintf("%s %s", articleData.PostText, article.URL),
+			PostText:     fmt.Sprintf("%s %s", articleData.PostText, articleData.URL), // Use original URL in post text
 			IsRepost:     articleData.IsRepost,
 			PostedAt:     articleData.PublishedAt.Add(-time.Duration(i) * time.Hour), // Stagger posting times
 			LikesCount:   articleData.LikesCount,
@@ -381,4 +498,24 @@ func extractDomainFromURL(urlStr string) string {
 		return ""
 	}
 	return strings.TrimPrefix(u.Host, "www.")
+}
+
+// extractTitleFromPost extracts a title from a post text and link
+func extractTitleFromPost(postText, link string) string {
+	// For now, use the domain name and post text as title
+	// In a real implementation, this might fetch the page and extract the actual title
+	domain := extractDomainFromURL(link)
+	truncated := truncateText(postText, 100)
+	if truncated != "" {
+		return fmt.Sprintf("%s - %s", domain, truncated)
+	}
+	return domain
+}
+
+// truncateText truncates text to a maximum length, adding ellipsis if needed
+func truncateText(text string, maxLength int) string {
+	if len(text) <= maxLength {
+		return text
+	}
+	return text[:maxLength-3] + "..."
 }

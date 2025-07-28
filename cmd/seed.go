@@ -46,10 +46,27 @@ func main() {
 		log.Fatal("Failed to run migrations:", err)
 	}
 
+	// Initialize Bluesky client for potential authentication
+	var authenticatedClient *bluesky.Client
+	identifier := os.Getenv("BLUESKY_IDENTIFIER")
+	password := os.Getenv("BLUESKY_PASSWORD")
+	
+	if identifier != "" && password != "" {
+		client := bluesky.NewClient("https://bsky.social")
+		log.Printf("🔐 Authenticating with Bluesky as %s...", identifier)
+		if err := client.CreateSession(identifier, password); err != nil {
+			log.Printf("⚠️  Authentication failed: %v", err)
+			log.Printf("💡 Will use mock data instead")
+		} else {
+			log.Printf("✅ Successfully authenticated with Bluesky")
+			authenticatedClient = client
+		}
+	}
+
 	if *articlesOnly {
 		// Only seed articles
 		log.Printf("📰 Articles-only seeding mode")
-		seedArticles()
+		seedArticles(authenticatedClient)
 	} else {
 		// Full seeding: users, sources, and articles
 		// Seed a test user with a real Bluesky handle
@@ -57,7 +74,7 @@ func main() {
 		seedTestUser(*userHandle, *userDID)
 		
 		// Seed articles for testing
-		seedArticles()
+		seedArticles(authenticatedClient)
 	}
 
 	log.Println("✅ Database seeding completed")
@@ -351,7 +368,7 @@ func seedPopularSources() {
 }
 
 // seedArticles seeds the database with test articles
-func seedArticles() {
+func seedArticles(authenticatedClient *bluesky.Client) {
 	log.Printf("📰 Seeding articles...")
 	
 	// Check if we already have articles
@@ -363,8 +380,16 @@ func seedArticles() {
 		return
 	}
 	
-	// Initialize Bluesky client and ArticlesService
-	client := bluesky.NewClient("https://bsky.social")
+	// Use authenticated client if available, otherwise create a new one
+	var client *bluesky.Client
+	if authenticatedClient != nil {
+		client = authenticatedClient
+		log.Printf("🔐 Using authenticated Bluesky client for article import")
+	} else {
+		client = bluesky.NewClient("https://bsky.social")
+		log.Printf("⚠️  No authenticated client available, using unauthenticated client")
+	}
+	
 	articlesService := services.NewArticlesService(database.DB, client)
 	
 	// Configure article seeding
