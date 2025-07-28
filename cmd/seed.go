@@ -20,14 +20,18 @@ import (
 
 func main() {
 	// Parse command line flags
-	var userHandle = flag.String("handle", "bsky.app", "Bluesky handle to seed as test user")
+	var userHandle = flag.String("handle", "", "Bluesky handle to seed as user (leave empty for mock data only)")
 	var userDID = flag.String("did", "did:plc:z72i7hdynmk6r22z27h6tvur", "DID of the test user (optional)")
 	var articlesOnly = flag.Bool("articles-only", false, "Only seed articles, skip users and sources")
 	flag.Parse()
 	
 	log.Printf("🌱 Open News Database Seeder")
 	log.Printf("============================")
-	log.Printf("Test user: %s", *userHandle)
+	if *userHandle != "" {
+		log.Printf("User: %s", *userHandle)
+	} else {
+		log.Printf("Mode: Mock data only")
+	}
 	
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
@@ -66,7 +70,7 @@ func main() {
 	if *articlesOnly {
 		// Only seed articles
 		log.Printf("📰 Articles-only seeding mode")
-		seedArticles(authenticatedClient)
+		seedArticles(authenticatedClient, *userHandle)
 	} else {
 		// Full seeding: users, sources, and articles
 		// Seed a test user with a real Bluesky handle
@@ -74,7 +78,7 @@ func main() {
 		seedTestUser(*userHandle, *userDID)
 		
 		// Seed articles for testing
-		seedArticles(authenticatedClient)
+		seedArticles(authenticatedClient, *userHandle)
 	}
 
 	log.Println("✅ Database seeding completed")
@@ -103,50 +107,79 @@ func main() {
 }
 
 func seedTestUser(handle, did string) {
-	log.Printf("🌱 Seeding test user: %s", handle)
-	
-	// For custom handles that aren't the default bsky.app, create a meaningful DID
-	if did == "did:plc:z72i7hdynmk6r22z27h6tvur" && handle != "bsky.app" {
-		log.Printf("💡 Creating test DID for handle: %s", handle)
-		// For local testing, create a deterministic test DID based on the handle
-		did = "did:plc:test-" + strings.ReplaceAll(handle, ".", "-")
-		log.Printf("✅ Using test DID: %s", did)
+	if handle == "" {
+		log.Printf("🌱 No handle provided - seeding mock data only")
+		// Create mock sources without a user
+		seedPopularSources()
+		return
 	}
+	
+	log.Printf("🌱 Seeding user: %s", handle)
+	
+	// First, validate that this is a real Bluesky handle
+	client := bluesky.NewClient("https://bsky.social")
+	
+	// Check if we have credentials for authentication
+	identifier := os.Getenv("BLUESKY_IDENTIFIER")
+	password := os.Getenv("BLUESKY_PASSWORD")
+	
+	if identifier == "" || password == "" {
+		log.Printf("❌ No Bluesky credentials found in environment")
+		log.Printf("💡 Set BLUESKY_IDENTIFIER and BLUESKY_PASSWORD to validate real handles")
+		log.Printf("💡 Or run without -handle flag to create mock data only")
+		log.Fatal("Cannot validate real handle without authentication")
+	}
+	
+	log.Printf("� Authenticating with Bluesky to validate handle...")
+	if err := client.CreateSession(identifier, password); err != nil {
+		log.Printf("❌ Failed to authenticate with Bluesky: %v", err)
+		log.Fatal("Cannot validate handle without authentication")
+	}
+	
+	log.Printf("🔍 Validating handle: %s", handle)
+	realDID, err := client.ResolveHandle(handle)
+	if err != nil {
+		log.Printf("❌ Handle '%s' is not a valid Bluesky account: %v", handle, err)
+		log.Printf("💡 To seed mock data instead, run: go run cmd/seed.go (without -handle flag)")
+		log.Fatalf("Invalid Bluesky handle: %s", handle)
+	}
+	
+	log.Printf("✅ Validated handle: %s (DID: %s)", handle, realDID)
 	
 	// Check if user already exists by DID or handle
 	var existingUser models.User
-	if err := database.DB.Where("blue_sky_d_id = ? OR handle = ?", did, handle).First(&existingUser).Error; err != nil {
-		// User doesn't exist, create them with basic information
+	if err := database.DB.Where("blue_sky_d_id = ? OR handle = ?", realDID, handle).First(&existingUser).Error; err != nil {
+		// User doesn't exist, create them with the real DID
 		testUser := models.User{
-			BlueSkyDID:  did,
+			BlueSkyDID:  realDID,
 			Handle:      handle,
 			DisplayName: handle,
-			Bio:         "Test user for local development - real Bluesky handle",
+			Bio:         "Real Bluesky user for local development",
 			IsActive:    true,
 		}
 		
 		if err := database.DB.Create(&testUser).Error; err != nil {
-			log.Printf("❌ Failed to create test user: %v", err)
+			log.Printf("❌ Failed to create user: %v", err)
 			return
 		}
 		
-		log.Printf("✅ Created test user: %s (DID: %s)", testUser.Handle, testUser.BlueSkyDID)
+		log.Printf("✅ Created user: %s (DID: %s)", testUser.Handle, testUser.BlueSkyDID)
 		
-		// Try to import their follows automatically for better testing
+		// Import their follows automatically
 		importTestUserFollows(testUser)
 		
 	} else {
-		log.Printf("✅ Test user already exists: %s", existingUser.Handle)
+		log.Printf("✅ User already exists: %s", existingUser.Handle)
 		
 		// Check if they have follows imported
 		var followCount int64
 		database.DB.Model(&models.UserSource{}).Where("user_id = ?", existingUser.ID).Count(&followCount)
 		
 		if followCount == 0 {
-			log.Printf("📥 No follows found for test user, attempting to import...")
+			log.Printf("📥 No follows found for user, attempting to import...")
 			importTestUserFollows(existingUser)
 		} else {
-			log.Printf("✅ Test user has %d follows already imported", followCount)
+			log.Printf("✅ User has %d follows already imported", followCount)
 		}
 	}
 }
@@ -368,7 +401,7 @@ func seedPopularSources() {
 }
 
 // seedArticles seeds the database with test articles
-func seedArticles(authenticatedClient *bluesky.Client) {
+func seedArticles(authenticatedClient *bluesky.Client, handle string) {
 	log.Printf("📰 Seeding articles...")
 	
 	// Check if we already have articles
@@ -403,12 +436,34 @@ func seedArticles(authenticatedClient *bluesky.Client) {
 	// Try to import real articles from Bluesky first
 	log.Printf("🔄 Attempting to import recent articles from Bluesky...")
 	if err := articlesService.ImportArticlesFromSources(config); err != nil {
-		log.Printf("⚠️  Could not import articles from Bluesky: %v", err)
+		log.Printf("⚠️  Technical error importing articles from Bluesky: %v", err)
 		log.Printf("💡 Creating mock articles for testing...")
 		
-		// Fall back to creating mock articles for development
+		// Fall back to creating mock articles for development only on technical errors
 		if err := articlesService.CreateMockArticles(config); err != nil {
 			log.Printf("❌ Failed to create mock articles: %v", err)
+		}
+	} else {
+		// Check if we actually got any articles
+		var articleCount int64
+		database.DB.Model(&models.Article{}).Count(&articleCount)
+		if articleCount == 0 {
+			log.Printf("📰 No articles found in recent posts from followed sources")
+			if handle == "" {
+				log.Printf("💡 Creating mock articles for UI testing (mock mode)...")
+				
+				// Create mock articles only when in mock mode (no handle provided)
+				mockConfig := config
+				mockConfig.MaxArticles = 10 // More articles for UI testing in mock mode
+				if err := articlesService.CreateMockArticles(mockConfig); err != nil {
+					log.Printf("❌ Failed to create mock articles: %v", err)
+				}
+			} else {
+				log.Printf("ℹ️  No mock articles created with real handle - this ensures data integrity")
+				log.Printf("💡 To test the UI with sample data, run: go run cmd/seed.go (without -handle)")
+			}
+		} else {
+			log.Printf("✅ Found %d real articles from followed sources", articleCount)
 		}
 	}
 }

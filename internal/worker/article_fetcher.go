@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,6 +36,47 @@ func NewArticleFetcher(db *gorm.DB) *ArticleFetcher {
 			},
 		},
 	}
+}
+
+// CheckIfNewsArticle fetches a URL and checks if it contains NewsArticle JSON-LD schema
+func (af *ArticleFetcher) CheckIfNewsArticle(ctx context.Context, articleURL string) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", articleURL, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set a reasonable User-Agent
+	req.Header.Set("User-Agent", "OpenNews/1.0 (+https://opennews.social)")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+
+	resp, err := af.httpClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("failed to fetch URL: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+	}
+
+	// Read the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	htmlContent := string(body)
+	
+	// Parse HTML and extract metadata
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		return false, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+
+	metadata := &ArticleMetadata{}
+	af.extractJSONLD(doc, metadata)
+
+	return af.IsNewsArticle(metadata.JSONLDDATA), nil
 }
 
 // FetchAndCacheArticle fetches article content and metadata, then caches it
@@ -210,10 +252,80 @@ func (af *ArticleFetcher) extractOpenGraphMetadata(n *html.Node, metadata *Artic
 	// For now, keeping it simple
 }
 
-// extractJSONLD extracts JSON-LD structured data
+// extractJSONLD extracts JSON-LD structured data and checks for NewsArticle schema
 func (af *ArticleFetcher) extractJSONLD(n *html.Node, metadata *ArticleMetadata) {
-	// This would be implemented to extract JSON-LD structured data
-	// For now, keeping it simple
+	af.findJSONLDScripts(n, metadata)
+}
+
+// findJSONLDScripts recursively searches for script tags with JSON-LD content
+func (af *ArticleFetcher) findJSONLDScripts(n *html.Node, metadata *ArticleMetadata) {
+	if n.Type == html.ElementNode && n.Data == "script" {
+		typeAttr := af.getAttributeValue(n, "type")
+		if typeAttr == "application/ld+json" {
+			jsonContent := af.getTextContent(n)
+			if jsonContent != "" {
+				metadata.JSONLDDATA = jsonContent
+			}
+		}
+	}
+
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		af.findJSONLDScripts(c, metadata)
+	}
+}
+
+// IsNewsArticle checks if the JSON-LD data contains a NewsArticle schema type
+func (af *ArticleFetcher) IsNewsArticle(jsonldData string) bool {
+	if jsonldData == "" {
+		return false
+	}
+
+	// Parse JSON-LD data
+	var jsonLD interface{}
+	if err := json.Unmarshal([]byte(jsonldData), &jsonLD); err != nil {
+		return false
+	}
+
+	// Check if it's an array of JSON-LD objects
+	if jsonArray, ok := jsonLD.([]interface{}); ok {
+		for _, item := range jsonArray {
+			if af.checkForNewsArticleType(item) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Check if it's a single JSON-LD object
+	return af.checkForNewsArticleType(jsonLD)
+}
+
+// checkForNewsArticleType checks if a JSON-LD object has @type of NewsArticle
+func (af *ArticleFetcher) checkForNewsArticleType(obj interface{}) bool {
+	jsonObj, ok := obj.(map[string]interface{})
+	if !ok {
+		return false
+	}
+
+	// Check @type field
+	typeField, exists := jsonObj["@type"]
+	if !exists {
+		return false
+	}
+
+	// @type can be a string or array of strings
+	switch t := typeField.(type) {
+	case string:
+		return t == "NewsArticle"
+	case []interface{}:
+		for _, typeName := range t {
+			if typeStr, ok := typeName.(string); ok && typeStr == "NewsArticle" {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // extractTextFromHTML extracts plain text from HTML

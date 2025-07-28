@@ -6,6 +6,7 @@
 *.dylib
 bin/
 main
+seed
 
 # Test binary, built with `go test -c`
 *.test
