@@ -411,18 +411,25 @@ reset_database() {
         print_status "Resetting database..."
         cd "$PROJECT_ROOT"
         
-        # Drop and recreate database tables
-        psql -d open_news -c "
-            DROP TABLE IF EXISTS user_feed_preferences CASCADE;
-            DROP TABLE IF EXISTS feed_items CASCADE;
-            DROP TABLE IF EXISTS feeds CASCADE;
-            DROP TABLE IF EXISTS user_sources CASCADE;
-            DROP TABLE IF EXISTS sources CASCADE;
-            DROP TABLE IF EXISTS articles CASCADE;
-            DROP TABLE IF EXISTS users CASCADE;
+        # Load database configuration
+        DB_NAME=${DB_NAME:-open_news}
+        DB_USER=${DB_USER:-mterenzi}
+        
+        # Terminate any active connections to the database
+        print_status "Terminating active database connections..."
+        psql -h localhost -U "$DB_USER" -d postgres -c "
+            SELECT pg_terminate_backend(pg_stat_activity.pid) 
+            FROM pg_stat_activity 
+            WHERE pg_stat_activity.datname = '$DB_NAME' 
+            AND pid <> pg_backend_pid();
         " 2>/dev/null || true
         
-        print_success "Database tables dropped"
+        # Drop and recreate the entire database
+        print_status "Dropping and recreating database '$DB_NAME'..."
+        psql -h localhost -U "$DB_USER" -d postgres -c "DROP DATABASE IF EXISTS $DB_NAME;" 2>/dev/null || true
+        psql -h localhost -U "$DB_USER" -d postgres -c "CREATE DATABASE $DB_NAME;" 2>/dev/null || true
+        
+        print_success "Database completely recreated"
         
         # Run migrations to recreate tables
         print_status "Running migrations..."

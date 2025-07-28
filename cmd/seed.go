@@ -132,20 +132,6 @@ func seedTestUser(handle, did string) {
 			log.Printf("✅ Test user has %d follows already imported", followCount)
 		}
 	}
-	
-	// Optionally seed a few popular Bluesky accounts as additional test sources
-	seedPopularSources()
-	
-	// After seeding sources, create user-source relationships for the test user
-	var testUser models.User
-	testDID := did
-	if did == "did:plc:z72i7hdynmk6r22z27h6tvur" && handle != "bsky.app" {
-		testDID = "did:plc:test-" + strings.ReplaceAll(handle, ".", "-")
-	}
-	
-	if err := database.DB.Where("blue_sky_d_id = ? OR handle = ?", testDID, handle).First(&testUser).Error; err == nil {
-		createMockUserSourceRelationships(testUser)
-	}
 }
 
 func createMockUserSourceRelationships(user models.User) {
@@ -200,7 +186,7 @@ func importTestUserFollows(user models.User) {
 		if err := client.CreateSession(identifier, password); err != nil {
 			log.Printf("❌ Failed to authenticate with Bluesky: %v", err)
 			log.Printf("💡 Falling back to mock data...")
-			createMockUserSourceRelationships(user)
+			fallbackToMockSources(user)
 			return
 		}
 		
@@ -210,7 +196,7 @@ func importTestUserFollows(user models.User) {
 			realDID, err := client.ResolveHandle(user.Handle)
 			if err != nil {
 				log.Printf("❌ Failed to resolve real DID: %v", err)
-				createMockUserSourceRelationships(user)
+				fallbackToMockSources(user)
 				return
 			}
 			
@@ -219,7 +205,7 @@ func importTestUserFollows(user models.User) {
 			// Update user with real DID
 			if err := database.DB.Model(&user).Update("blue_sky_d_id", realDID).Error; err != nil {
 				log.Printf("❌ Failed to update user DID: %v", err)
-				createMockUserSourceRelationships(user)
+				fallbackToMockSources(user)
 				return
 			}
 			user.BlueSkyDID = realDID
@@ -227,8 +213,8 @@ func importTestUserFollows(user models.User) {
 		
 		log.Printf("✅ Successfully authenticated, importing real follows...")
 	} else {
-		log.Printf("💡 No Bluesky credentials found, creating mock relationships...")
-		createMockUserSourceRelationships(user)
+		log.Printf("💡 No Bluesky credentials found, creating mock sources for testing...")
+		fallbackToMockSources(user)
 		return
 	}
 	
@@ -244,8 +230,8 @@ func importTestUserFollows(user models.User) {
 	// Use the systematic follow refresh service
 	if err := userFollowsService.ImportUserFollows(&user, config); err != nil {
 		log.Printf("⚠️  Could not import follows with UserFollowsService: %v", err)
-		log.Printf("💡 Creating mock user-source relationships for testing...")
-		createMockUserSourceRelationships(user)
+		log.Printf("💡 Creating mock sources for testing...")
+		fallbackToMockSources(user)
 		return
 	}
 	
@@ -253,6 +239,14 @@ func importTestUserFollows(user models.User) {
 	var followCount int64
 	database.DB.Model(&models.UserSource{}).Where("user_id = ?", user.ID).Count(&followCount)
 	log.Printf("✅ Successfully imported %d real follows for %s", followCount, user.Handle)
+}
+
+func fallbackToMockSources(user models.User) {
+	log.Printf("💡 Creating mock sources and relationships for %s...", user.Handle)
+	
+	// Only create mock sources if we don't have real authentication
+	seedPopularSources()
+	createMockUserSourceRelationships(user)
 }
 
 func seedPopularSources() {
