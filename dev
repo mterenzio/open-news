@@ -412,7 +412,7 @@ reset_database() {
         cd "$PROJECT_ROOT"
         
         # Drop and recreate database tables
-        psql -d mterenzi -c "
+        psql -d open_news -c "
             DROP TABLE IF EXISTS user_feed_preferences CASCADE;
             DROP TABLE IF EXISTS feed_items CASCADE;
             DROP TABLE IF EXISTS feeds CASCADE;

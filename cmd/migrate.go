@@ -16,6 +16,7 @@ func main() {
 
 	// Connect to database
 	dbConfig := database.LoadConfig()
+	log.Printf("🔍 Database config: %+v", dbConfig)
 	if err := database.Connect(dbConfig); err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}

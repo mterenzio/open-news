@@ -101,6 +101,19 @@ make run
 
 The application provides flexible seeding options for development and testing:
 
+### Complete Database Reset and Seed (Recommended for Development)
+```bash
+./dev reset && go run cmd/seed.go -handle your.handle.bsky.social
+```
+**Complete fresh start**: Drops all tables, runs migrations, and seeds with real Bluesky user data. This workflow:
+- Resets the entire database to a clean state
+- Runs all migrations to recreate schema
+- Creates a user record with actual profile data from Bluesky
+- Imports their real follows as sources (authenticates with Bluesky)
+- Seeds with mock articles for testing
+
+This is the recommended workflow for consistent development environments.
+
 ### Popular Sources (Default)
 ```bash
 make seed

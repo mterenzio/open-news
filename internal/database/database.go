@@ -39,10 +39,19 @@ func LoadConfig() *Config {
 
 // Connect establishes a connection to the PostgreSQL database
 func Connect(config *Config) error {
+	// Build DSN without empty password parameter
 	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		config.Host, config.Port, config.User, config.Password, config.DBName, config.SSLMode,
+		"host=%s port=%s user=%s dbname=%s sslmode=%s",
+		config.Host, config.Port, config.User, config.DBName, config.SSLMode,
 	)
+	
+	// Only add password if it's not empty
+	if config.Password != "" {
+		dsn = fmt.Sprintf(
+			"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+			config.Host, config.Port, config.User, config.Password, config.DBName, config.SSLMode,
+		)
+	}
 
 	var err error
 	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
