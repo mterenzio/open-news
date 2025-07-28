@@ -4,8 +4,10 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"open-news/internal/models"
+	"open-news/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -14,13 +16,15 @@ import (
 
 // AdminHandler handles admin interface
 type AdminHandler struct {
-	db *gorm.DB
+	db                 *gorm.DB
+	userFollowsService *services.UserFollowsService
 }
 
 // NewAdminHandler creates a new admin handler
-func NewAdminHandler(db *gorm.DB) *AdminHandler {
+func NewAdminHandler(db *gorm.DB, userFollowsService *services.UserFollowsService) *AdminHandler {
 	return &AdminHandler{
-		db: db,
+		db:                 db,
+		userFollowsService: userFollowsService,
 	}
 }
 
@@ -298,7 +302,8 @@ func (h *AdminHandler) generateUsersPageHTML(users []models.User, page, limit in
                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Display Name</th>
                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">DID</th>
                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Active</th>
-                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Created</th>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Last Refresh</th>
+                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>`
@@ -309,13 +314,24 @@ func (h *AdminHandler) generateUsersPageHTML(users []models.User, page, limit in
 			activeStatus = "✅"
 		}
 
+		lastRefresh := "Never"
+		if !user.FollowsLastRefreshed.IsZero() {
+			lastRefresh = user.FollowsLastRefreshed.Format("Jan 2, 15:04")
+		}
+
 		html += `
                     <tr style="border-bottom: 1px solid #f1f5f9;">
                         <td style="padding: 1rem;">@` + user.Handle + `</td>
                         <td style="padding: 1rem;">` + user.DisplayName + `</td>
                         <td style="padding: 1rem; font-family: monospace; font-size: 0.875rem;">` + user.BlueSkyDID[:20] + `...</td>
                         <td style="padding: 1rem;">` + activeStatus + `</td>
-                        <td style="padding: 1rem;">` + user.CreatedAt.Format("Jan 2, 2006") + `</td>
+                        <td style="padding: 1rem;">` + lastRefresh + `</td>
+                        <td style="padding: 1rem;">
+                            <button onclick="refreshUserFollows('` + user.Handle + `')" 
+                                    style="background: #3b82f6; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem;">
+                                🔄 Refresh
+                            </button>
+                        </td>
                     </tr>`
 	}
 
@@ -326,6 +342,57 @@ func (h *AdminHandler) generateUsersPageHTML(users []models.User, page, limit in
 
         ` + h.generatePagination(page, limit, total, "/admin/users") + `
     </div>
+
+    <script>
+        function refreshUserFollows(userHandle) {
+            const button = event.target;
+            const originalText = button.innerHTML;
+            
+            // Show loading state
+            button.innerHTML = '⏳ Refreshing...';
+            button.disabled = true;
+            
+            fetch('/admin/refresh-follows/' + encodeURIComponent(userHandle), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    button.innerHTML = '✅ Done';
+                    button.style.background = '#10b981';
+                    setTimeout(() => {
+                        button.innerHTML = originalText;
+                        button.style.background = '#3b82f6';
+                        button.disabled = false;
+                        // Reload the page to show updated refresh time
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    button.innerHTML = '❌ Error';
+                    button.style.background = '#ef4444';
+                    setTimeout(() => {
+                        button.innerHTML = originalText;
+                        button.style.background = '#3b82f6';
+                        button.disabled = false;
+                    }, 3000);
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                button.innerHTML = '❌ Error';
+                button.style.background = '#ef4444';
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                    button.style.background = '#3b82f6';
+                    button.disabled = false;
+                }, 3000);
+                alert('Network error: ' + error.message);
+            });
+        }
+    </script>
 </body>
 </html>`
 
@@ -563,4 +630,71 @@ func (h *AdminHandler) getPaginationButton(basePath string, page int, text strin
 		return `<span style="padding: 0.5rem 1rem; background: #f1f5f9; color: #94a3b8; border-radius: 6px;">` + text + `</span>`
 	}
 	return `<a href="` + basePath + `?page=` + strconv.Itoa(page) + `" style="padding: 0.5rem 1rem; background: white; color: #3b82f6; border: 1px solid #e2e8f0; border-radius: 6px; text-decoration: none; transition: all 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">` + text + `</a>`
+}
+
+// RefreshUserFollows handles manual refresh of user follows
+func (h *AdminHandler) RefreshUserFollows(c *gin.Context) {
+	userIdentifier := c.Param("user")
+	if userIdentifier == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user identifier (handle or DID) is required"})
+		return
+	}
+
+	// Force refresh config (ignore time limits)
+	config := services.RefreshConfig{
+		RefreshInterval: 0, // Force immediate refresh
+		BatchSize:       10,
+		RateLimit:       100 * time.Millisecond,
+	}
+
+	// Find the user by DID or handle
+	var user models.User
+	var err error
+	if len(userIdentifier) > 20 && (userIdentifier[:8] == "did:plc:" || userIdentifier[:8] == "did:web:") {
+		// Looks like a DID
+		err = h.db.Where("blue_sky_d_id = ?", userIdentifier).First(&user).Error
+	} else {
+		// Assume it's a handle (with or without @)
+		handle := userIdentifier
+		if handle[0] == '@' {
+			handle = handle[1:] // Remove @ prefix if present
+		}
+		err = h.db.Where("handle = ?", handle).First(&user).Error
+	}
+	
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	// Import follows
+	if err := h.userFollowsService.ImportUserFollows(&user, config); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to refresh follows: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Successfully refreshed follows for user " + user.Handle,
+	})
+}
+
+// RefreshAllUserFollows handles manual refresh of all users' follows
+func (h *AdminHandler) RefreshAllUserFollows(c *gin.Context) {
+	// Force refresh config (ignore time limits)
+	config := services.RefreshConfig{
+		RefreshInterval: 0, // Force immediate refresh for all users
+		BatchSize:       50, // Process more users at once for manual refresh
+		RateLimit:       100 * time.Millisecond,
+	}
+
+	if err := h.userFollowsService.RefreshBatch(config); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to refresh follows: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Successfully triggered refresh for all users",
+	})
 }

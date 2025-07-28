@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"open-news/internal/metadata"
 	"open-news/internal/models"
 
 	"github.com/gorilla/websocket"
@@ -17,17 +18,19 @@ import (
 
 // FirehoseConsumer handles the Bluesky Jetstream connection and processing
 type FirehoseConsumer struct {
-	db     *gorm.DB
-	client *Client
-	dialer *websocket.Dialer
+	db                *gorm.DB
+	client            *Client
+	dialer            *websocket.Dialer
+	metadataExtractor *metadata.MetadataExtractor
 }
 
 // NewFirehoseConsumer creates a new firehose consumer
 func NewFirehoseConsumer(db *gorm.DB, client *Client) *FirehoseConsumer {
 	return &FirehoseConsumer{
-		db:     db,
-		client: client,
-		dialer: websocket.DefaultDialer,
+		db:                db,
+		client:            client,
+		dialer:            websocket.DefaultDialer,
+		metadataExtractor: metadata.NewMetadataExtractor(),
 	}
 }
 
@@ -296,17 +299,53 @@ func (fc *FirehoseConsumer) processLink(linkURL string, source *models.Source, p
 	err = fc.db.Where("url = ?", canonicalURL).First(&article).Error
 
 	if err == gorm.ErrRecordNotFound {
-		// Article doesn't exist, create it
-		article = models.Article{
-			URL:       canonicalURL,
-			IsCached:  false,
-			CreatedAt: time.Now(),
+		// Article doesn't exist, create it with metadata extraction
+		log.Printf("New article discovered, extracting metadata: %s", canonicalURL)
+		
+		// Create context for metadata extraction
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		
+		// Extract metadata from the URL
+		metadata, err := fc.metadataExtractor.ExtractMetadata(ctx, canonicalURL)
+		if err != nil {
+			log.Printf("Failed to extract metadata for %s: %v", canonicalURL, err)
+			// Create article with basic data even if metadata extraction fails
+			article = models.Article{
+				URL:       canonicalURL,
+				IsCached:  false,
+				CreatedAt: time.Now(),
+			}
+		} else {
+			// Create article with extracted metadata
+			now := time.Now()
+			article = models.Article{
+				URL:          canonicalURL,
+				Title:        metadata.Title,
+				Description:  metadata.Description,
+				Author:       metadata.Author,
+				SiteName:     metadata.SiteName,
+				ImageURL:     metadata.ImageURL,
+				PublishedAt:  metadata.PublishedAt,
+				JSONLDData:   metadata.JSONLDData,
+				OGData:       metadata.OGData,
+				HTMLContent:  metadata.HTMLContent,
+				TextContent:  metadata.TextContent,
+				WordCount:    int(metadata.WordCount),
+				ReadingTime:  int(metadata.ReadingTime),
+				Language:     metadata.Language,
+				IsCached:     true,
+				CachedAt:     &now,
+				LastFetchAt:  &now,
+				CreatedAt:    time.Now(),
+			}
 		}
+		
 		if err := fc.db.Create(&article).Error; err != nil {
 			return fmt.Errorf("failed to create article: %w", err)
 		}
 
-		log.Printf("New article discovered: %s", canonicalURL)
+		log.Printf("New article created with metadata: %s (title: %s)", canonicalURL, article.Title)
 	} else if err != nil {
 		return fmt.Errorf("failed to query article: %w", err)
 	}

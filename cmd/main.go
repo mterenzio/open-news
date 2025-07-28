@@ -96,7 +96,7 @@ func setupServer(workerService *worker.WorkerService) {
 	// Initialize handlers
 	feedHandler := handlers.NewFeedHandler(database.DB, workerService)
 	feedPageHandler := handlers.NewFeedPageHandler(database.DB)
-	adminHandler := handlers.NewAdminHandler(database.DB)
+	adminHandler := handlers.NewAdminHandler(database.DB, workerService.GetUserFollowsService())
 	docsHandler := handlers.NewDocsHandler()
 	
 	// Initialize Bluesky client for custom feeds
@@ -175,6 +175,8 @@ func setupServer(workerService *worker.WorkerService) {
 		admin.GET("/users", adminHandler.ServeUsersPage)
 		admin.GET("/sources", adminHandler.ServeSourcesPage)
 		admin.GET("/articles", adminHandler.ServeArticlesPage)
+		admin.POST("/refresh-follows", adminHandler.RefreshAllUserFollows)
+		admin.POST("/refresh-follows/:user", adminHandler.RefreshUserFollows)
 	}
 
 	// Get port from environment or default to 8080
