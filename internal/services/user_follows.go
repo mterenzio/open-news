@@ -10,14 +10,19 @@ import (
 	"gorm.io/gorm"
 )
 
+// BlueskyClientInterface defines the interface for Bluesky API operations
+type BlueskyClientInterface interface {
+	GetFollows(actor string, limit int, cursor string) (*bluesky.FollowsResponse, error)
+}
+
 // UserFollowsService handles importing and updating user follows from Bluesky
 type UserFollowsService struct {
 	db            *gorm.DB
-	blueskyClient *bluesky.Client
+	blueskyClient BlueskyClientInterface
 }
 
 // NewUserFollowsService creates a new UserFollowsService
-func NewUserFollowsService(db *gorm.DB, blueskyClient *bluesky.Client) *UserFollowsService {
+func NewUserFollowsService(db *gorm.DB, blueskyClient BlueskyClientInterface) *UserFollowsService {
 	return &UserFollowsService{
 		db:            db,
 		blueskyClient: blueskyClient,
