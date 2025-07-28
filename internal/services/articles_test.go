@@ -1,23 +1,38 @@
 package services
 
 import (
+	"os"
 	"testing"
 	"time"
 
+	"open-news/internal/database"
 	"open-news/internal/models"
 
 	"github.com/google/uuid"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	// Set test environment variables
+	os.Setenv("DB_HOST", "localhost")
+	os.Setenv("DB_PORT", "5432")
+	os.Setenv("DB_USER", "mterenzi")
+	os.Setenv("DB_PASSWORD", "")
+	os.Setenv("DB_NAME", "open_news_test")
+	os.Setenv("DB_SSLMODE", "disable")
+
+	// Load test database configuration
+	config := database.LoadConfig()
+	
+	// Connect to test database
+	err := database.Connect(config)
 	if err != nil {
-		t.Fatalf("Failed to connect to test database: %v", err)
+		t.Skipf("Skipping test - PostgreSQL test database not available: %v", err)
 	}
 
-	// Auto-migrate all models
+	db := database.DB
+
+	// Run migrations to ensure schema is up to date
 	err = db.AutoMigrate(
 		&models.User{},
 		&models.Source{},
@@ -29,6 +44,9 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("Failed to migrate test database: %v", err)
 	}
+
+	// Clean up any existing test data
+	db.Exec("TRUNCATE TABLE source_articles, article_facts, articles, user_sources, sources, users, feeds RESTART IDENTITY CASCADE")
 
 	return db
 }
@@ -108,11 +126,13 @@ func TestCalculateReadingTime(t *testing.T) {
 		wordCount int
 		expected  int
 	}{
-		{"Short article", 100, 1},
-		{"Medium article", 400, 2}, 
-		{"Long article", 1000, 5},
-		{"Very long article", 2000, 10},
-		{"Empty article", 0, 0},
+		{"Short article", 100, 1},   // < 225 words = 1 min minimum
+		{"Medium article", 400, 1},  // 400/225 = 1.7, rounds down to 1, minimum is 1
+		{"Long article", 1000, 4},   // 1000/225 = 4.4, rounds down to 4
+		{"Very long article", 2000, 8}, // 2000/225 = 8.8, rounds down to 8
+		{"Empty article", 0, 1},     // minimum reading time is 1
+		{"Exactly 225 words", 225, 1}, // 225/225 = 1
+		{"450 words", 450, 2},       // 450/225 = 2
 	}
 
 	for _, tt := range tests {

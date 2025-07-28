@@ -175,6 +175,7 @@ func setupServer(workerService *worker.WorkerService) {
 		admin.GET("/users", adminHandler.ServeUsersPage)
 		admin.GET("/sources", adminHandler.ServeSourcesPage)
 		admin.GET("/articles", adminHandler.ServeArticlesPage)
+		admin.GET("/articles/:id", adminHandler.ServeArticleInspection)
 		admin.POST("/refresh-follows", adminHandler.RefreshAllUserFollows)
 		admin.POST("/refresh-follows/:user", adminHandler.RefreshUserFollows)
 	}

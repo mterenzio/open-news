@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -59,7 +60,7 @@ func (me *MetadataExtractor) ExtractMetadata(ctx context.Context, articleURL str
 	}
 
 	// Set appropriate headers
-	req.Header.Set("User-Agent", "OpenNews/1.0 (+https://opennews.social)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; OpenNewsBot/1.0; +https://opennews.social)")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
 	// Remove Accept-Encoding to let Go's HTTP client handle compression automatically
@@ -68,13 +69,17 @@ func (me *MetadataExtractor) ExtractMetadata(ctx context.Context, articleURL str
 	// Make HTTP request
 	resp, err := me.httpClient.Do(req)
 	if err != nil {
+		log.Printf("❌ Network error fetching %s: %v", articleURL, err)
 		return nil, fmt.Errorf("failed to fetch URL: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("❌ Failed to fetch metadata for %s: HTTP %d (%s)", articleURL, resp.StatusCode, resp.Status)
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
+
+	log.Printf("✅ Successfully fetched metadata for %s (HTTP %d)", articleURL, resp.StatusCode)
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)

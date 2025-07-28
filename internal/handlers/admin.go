@@ -501,7 +501,22 @@ func (h *AdminHandler) generateArticlesPageHTML(articles []models.Article, page,
                             <span>` + article.CreatedAt.Format("Jan 2, 2006 3:04 PM") + `</span>
                             <span style="padding: 0.25rem 0.5rem; border-radius: 4px; ` + qualityClass + `">
                                 Score: ` + strconv.FormatFloat(article.QualityScore, 'f', 1, 64) + `
-                            </span>
+                            </span>`
+
+		// Add fetch status indicator
+		if !article.IsReachable {
+			html += `
+                            <span style="padding: 0.25rem 0.5rem; border-radius: 4px; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;">
+                                ❌ Unreachable
+                            </span>`
+		}
+
+		html += `
+                            <span>•</span>
+                            <a href="/admin/articles/` + article.ID.String() + `" 
+                               style="color: #3b82f6; text-decoration: none; padding: 0.25rem 0.5rem; background: #eff6ff; border-radius: 4px; border: 1px solid #dbeafe;">
+                                🔍 Inspect
+                            </a>
                         </div>
                     </div>`
 
@@ -697,4 +712,278 @@ func (h *AdminHandler) RefreshAllUserFollows(c *gin.Context) {
 		"success": true,
 		"message": "Successfully triggered refresh for all users",
 	})
+}
+
+// ServeArticleInspection serves the detailed article inspection page
+func (h *AdminHandler) ServeArticleInspection(c *gin.Context) {
+	articleID := c.Param("id")
+	
+	// Parse UUID
+	id, err := uuid.Parse(articleID)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid article ID")
+		return
+	}
+
+	// Get article with all related data
+	var article models.Article
+	result := h.db.Preload("SourceArticles.Source").
+		Preload("Facts").
+		First(&article, id)
+	
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			c.String(http.StatusNotFound, "Article not found")
+			return
+		}
+		c.String(http.StatusInternalServerError, "Database error: "+result.Error.Error())
+		return
+	}
+
+	html := h.generateArticleInspectionHTML(article)
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, html)
+}
+
+// generateArticleInspectionHTML generates the detailed article inspection page
+func (h *AdminHandler) generateArticleInspectionHTML(article models.Article) string {
+	html := h.generateAdminLayout("Article Inspection", "/admin/articles")
+	
+	// Determine quality score styling
+	qualityClass := "background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;" // Low
+	qualityIcon := "⚠️"
+	if article.QualityScore >= 0.7 {
+		qualityClass = "background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0;" // High
+		qualityIcon = "✅"
+	} else if article.QualityScore >= 0.5 {
+		qualityClass = "background: #fefce8; color: #a16207; border: 1px solid #fde68a;" // Medium
+		qualityIcon = "⚡"
+	}
+
+	// Get source information
+	sourceName := "Unknown Source"
+	sourceHandle := "N/A"
+	sourceDID := "N/A"
+	postURI := "N/A"
+	if len(article.SourceArticles) > 0 {
+		sourceArticle := article.SourceArticles[0]
+		if sourceArticle.Source.ID != uuid.Nil {
+			sourceName = sourceArticle.Source.DisplayName
+			sourceHandle = sourceArticle.Source.Handle
+			sourceDID = sourceArticle.Source.BlueSkyDID
+		}
+		postURI = sourceArticle.PostURI
+	}
+
+	html += `
+        <div style="margin-bottom: 1.5rem;">
+            <a href="/admin/articles" style="color: #3b82f6; text-decoration: none; font-size: 0.875rem;">
+                ← Back to Articles
+            </a>
+        </div>
+
+        <div style="background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <div style="border-bottom: 1px solid #e2e8f0; padding-bottom: 1.5rem; margin-bottom: 1.5rem;">
+                <h1 style="margin: 0 0 1rem 0; color: #1e293b; font-size: 1.5rem;">Article Inspection</h1>
+                <div style="padding: 1rem; border-radius: 8px; ` + qualityClass + `">
+                    <strong>` + qualityIcon + ` Quality Score: ` + strconv.FormatFloat(article.QualityScore, 'f', 3, 64) + `</strong>
+                </div>
+            </div>
+
+            <!-- Article Content -->
+            <div style="margin-bottom: 2rem;">
+                <h2 style="color: #1e293b; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem;">Content</h2>
+                <div style="display: grid; gap: 1rem;">
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Title:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">` + article.Title + `</div>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Description:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; line-height: 1.5;">` + article.Description + `</div>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">URL:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
+                            <a href="` + article.URL + `" target="_blank" style="color: #3b82f6; text-decoration: none;">` + article.URL + `</a>
+                        </div>
+                    </div>`
+	
+	if article.ImageURL != "" {
+		html += `
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Image:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
+                            <a href="` + article.ImageURL + `" target="_blank" style="color: #3b82f6; text-decoration: none;">` + article.ImageURL + `</a><br>
+                            <img src="` + article.ImageURL + `" alt="Article image" style="max-width: 200px; max-height: 200px; object-fit: cover; border-radius: 6px; margin-top: 0.5rem;">
+                        </div>
+                    </div>`
+	}
+
+	html += `
+                </div>
+            </div>
+
+            <!-- Metadata -->
+            <div style="margin-bottom: 2rem;">
+                <h2 style="color: #1e293b; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem;">Metadata</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Word Count:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">` + strconv.Itoa(article.WordCount) + `</div>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Reading Time:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">` + strconv.Itoa(article.ReadingTime) + ` min</div>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Language:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">` + article.Language + `</div>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Site Name:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">` + article.SiteName + `</div>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Author:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">` + article.Author + `</div>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Created:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">` + article.CreatedAt.Format("Jan 2, 2006 3:04:05 PM") + `</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fetch Status -->
+            <div style="margin-bottom: 2rem;">
+                <h2 style="color: #1e293b; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem;">Fetch Status</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">`
+
+	// Fetch status styling
+	reachableClass := "background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0;" // Green for reachable
+	reachableIcon := "✅"
+	reachableText := "Reachable"
+	
+	if !article.IsReachable {
+		reachableClass = "background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;" // Red for unreachable
+		reachableIcon = "❌"
+		reachableText = "Unreachable"
+	}
+
+	html += `
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Status:</label>
+                        <div style="padding: 0.75rem; border-radius: 6px; ` + reachableClass + `">` + reachableIcon + ` ` + reachableText + `</div>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Fetch Retries:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">` + strconv.Itoa(article.FetchRetries) + `</div>
+                    </div>`
+
+	if article.LastFetchAt != nil {
+		html += `
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Last Fetch Attempt:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">` + article.LastFetchAt.Format("Jan 2, 2006 3:04:05 PM") + `</div>
+                    </div>`
+	}
+
+	if article.LastFetchError != nil {
+		html += `
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Last Error Time:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">` + article.LastFetchError.Format("Jan 2, 2006 3:04:05 PM") + `</div>
+                    </div>`
+	}
+
+	if article.FetchError != "" {
+		html += `
+                    <div style="grid-column: 1 / -1;">
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Last Error Message:</label>
+                        <div style="padding: 0.75rem; background: #fef2f2; border-radius: 6px; border: 1px solid #fecaca; font-family: monospace; font-size: 0.875rem; color: #991b1b;">` + article.FetchError + `</div>
+                    </div>`
+	}
+
+	html += `
+                </div>
+            </div>
+
+            <!-- Source Information -->
+            <div style="margin-bottom: 2rem;">
+                <h2 style="color: #1e293b; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem;">Source Information</h2>
+                <div style="display: grid; gap: 1rem;">
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Source Name:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">` + sourceName + `</div>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Bluesky Handle:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">` + sourceHandle + `</div>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Bluesky DID:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; font-family: monospace; font-size: 0.875rem;">` + sourceDID + `</div>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; color: #374151; display: block; margin-bottom: 0.5rem;">Post URI:</label>
+                        <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; font-family: monospace; font-size: 0.875rem; word-break: break-all;">` + postURI + `</div>
+                    </div>
+                </div>
+            </div>`
+
+	// Article Facts section
+	if len(article.Facts) > 0 {
+		html += `
+            <div style="margin-bottom: 2rem;">
+                <h2 style="color: #1e293b; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem;">Article Facts</h2>
+                <div style="display: grid; gap: 0.5rem;">`
+
+		for _, fact := range article.Facts {
+			html += `
+                    <div style="padding: 0.75rem; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 500;">` + fact.FactType + `: ` + fact.FactText + `</span>
+                        <span style="font-family: monospace; background: #e2e8f0; padding: 0.25rem 0.5rem; border-radius: 4px;">Confidence: ` + strconv.FormatFloat(fact.Confidence, 'f', 3, 64) + `</span>
+                    </div>`
+		}
+
+		html += `
+                </div>
+            </div>`
+	}
+
+	// Raw JSON section for debugging
+	html += `
+            <div style="margin-bottom: 2rem;">
+                <h2 style="color: #1e293b; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem;">Raw Data (JSON)</h2>
+                <details style="margin-bottom: 1rem;">
+                    <summary style="cursor: pointer; padding: 0.5rem; background: #f8fafc; border-radius: 6px; font-weight: 500;">Article JSON</summary>
+                    <pre style="background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 6px; overflow-x: auto; margin-top: 0.5rem; font-size: 0.875rem; line-height: 1.4;">`
+
+	// Create a simplified JSON representation for display
+	html += `{
+  "id": "` + article.ID.String() + `",
+  "url": "` + article.URL + `",
+  "title": "` + article.Title + `",
+  "description": "` + article.Description + `",
+  "image_url": "` + article.ImageURL + `",
+  "site_name": "` + article.SiteName + `",
+  "author": "` + article.Author + `",
+  "language": "` + article.Language + `",
+  "word_count": ` + strconv.Itoa(article.WordCount) + `,
+  "reading_time": ` + strconv.Itoa(article.ReadingTime) + `,
+  "quality_score": ` + strconv.FormatFloat(article.QualityScore, 'f', 6, 64) + `,
+  "created_at": "` + article.CreatedAt.Format(time.RFC3339) + `",
+  "updated_at": "` + article.UpdatedAt.Format(time.RFC3339) + `"
+}`
+
+	html += `</pre>
+                </details>
+            </div>
+        </div>
+    </div>
+</body>
+</html>`
+
+	return html
 }

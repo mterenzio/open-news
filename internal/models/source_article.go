@@ -10,10 +10,10 @@ import (
 type SourceArticle struct {
 	ID         uuid.UUID `json:"id" db:"id" gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
 	SourceID   uuid.UUID `json:"source_id" db:"source_id" gorm:"not null;index"`
-	ArticleID  uuid.UUID `json:"article_id" db:"article_id" gorm:"not null;index"`
+	ArticleID  uuid.UUID `json:"article_id" db:"article_id" gorm:"not null;index;uniqueIndex:idx_source_articles_unique,priority:2"`
 	
 	// Bluesky post information
-	PostURI    string `json:"post_uri" db:"post_uri" gorm:"uniqueIndex;not null"` // Bluesky post AT URI
+	PostURI    string `json:"post_uri" db:"post_uri" gorm:"uniqueIndex:idx_source_articles_unique,priority:1;not null"` // Bluesky post AT URI
 	PostCID    string `json:"post_cid" db:"post_cid"`                             // Content identifier
 	PostText   string `json:"post_text" db:"post_text" gorm:"type:text"`          // Post content
 	

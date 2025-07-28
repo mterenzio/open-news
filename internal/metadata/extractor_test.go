@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"compress/gzip"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -185,6 +186,84 @@ func TestExtractMetadataTimeout(t *testing.T) {
 	_, err := extractor.ExtractMetadata(ctx, server.URL)
 	if err == nil {
 		t.Error("Expected timeout error")
+	}
+}
+
+func TestExtractMetadataHTTPHeaders(t *testing.T) {
+	// Test that we don't send Accept-Encoding header manually (regression test for gzip issue)
+	var receivedHeaders http.Header
+	
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedHeaders = r.Header
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<html><head><title>Test</title></head><body><h1>Test Content</h1></body></html>`))
+	}))
+	defer server.Close()
+
+	extractor := NewMetadataExtractor()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := extractor.ExtractMetadata(ctx, server.URL)
+	if err != nil {
+		t.Fatalf("Failed to extract metadata: %v", err)
+	}
+
+	// Verify that we don't manually set Accept-Encoding
+	// Go's HTTP client will set this automatically and handle decompression
+	acceptEncoding := receivedHeaders.Get("Accept-Encoding")
+	if acceptEncoding == "" {
+		// This is actually fine - Go may not set it at all
+		// What matters is that we don't manually set it to something problematic
+		t.Logf("Accept-Encoding header not set (OK)")
+	} else {
+		t.Logf("Accept-Encoding header set by Go HTTP client: %s", acceptEncoding)
+	}
+
+	// The important thing is that we can successfully parse the response
+	// without gzip decompression errors
+}
+
+func TestExtractMetadataGzipResponse(t *testing.T) {
+	// Test that we can handle gzipped responses properly
+	htmlContent := `<!DOCTYPE html>
+<html>
+<head>
+	<title>Gzipped Content Test</title>
+	<meta name="description" content="This content is served with gzip compression">
+</head>
+<body>
+	<h1>Compressed Content</h1>
+	<p>This tests that our metadata extractor can handle gzip-compressed responses properly.</p>
+</body>
+</html>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Content-Encoding", "gzip")
+		
+		// Write gzipped content
+		gzipWriter := gzip.NewWriter(w)
+		defer gzipWriter.Close()
+		gzipWriter.Write([]byte(htmlContent))
+	}))
+	defer server.Close()
+
+	extractor := NewMetadataExtractor()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	metadata, err := extractor.ExtractMetadata(ctx, server.URL)
+	if err != nil {
+		t.Fatalf("Failed to extract metadata from gzipped response: %v", err)
+	}
+
+	if metadata.Title != "Gzipped Content Test" {
+		t.Errorf("Expected title = 'Gzipped Content Test', got %q", metadata.Title)
+	}
+
+	if metadata.Description != "This content is served with gzip compression" {
+		t.Errorf("Expected description about gzip compression, got %q", metadata.Description)
 	}
 }
 

@@ -308,17 +308,23 @@ func (fc *FirehoseConsumer) processLink(linkURL string, source *models.Source, p
 		
 		// Extract metadata from the URL
 		metadata, err := fc.metadataExtractor.ExtractMetadata(ctx, canonicalURL)
+		now := time.Now()
+		
 		if err != nil {
 			log.Printf("Failed to extract metadata for %s: %v", canonicalURL, err)
-			// Create article with basic data even if metadata extraction fails
+			// Create article with basic data and mark as unreachable
 			article = models.Article{
-				URL:       canonicalURL,
-				IsCached:  false,
-				CreatedAt: time.Now(),
+				URL:            canonicalURL,
+				IsCached:       false,
+				IsReachable:    false,
+				FetchError:     err.Error(),
+				FetchRetries:   1,
+				LastFetchError: &now,
+				LastFetchAt:    &now,
+				CreatedAt:      time.Now(),
 			}
 		} else {
 			// Create article with extracted metadata
-			now := time.Now()
 			article = models.Article{
 				URL:          canonicalURL,
 				Title:        metadata.Title,
@@ -335,6 +341,7 @@ func (fc *FirehoseConsumer) processLink(linkURL string, source *models.Source, p
 				ReadingTime:  int(metadata.ReadingTime),
 				Language:     metadata.Language,
 				IsCached:     true,
+				IsReachable:  true,
 				CachedAt:     &now,
 				LastFetchAt:  &now,
 				CreatedAt:    time.Now(),

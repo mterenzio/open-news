@@ -46,6 +46,12 @@ type Article struct {
 	CachedAt     *time.Time `json:"cached_at" db:"cached_at"`
 	LastFetchAt  *time.Time `json:"last_fetch_at" db:"last_fetch_at"`
 	
+	// Fetch status tracking
+	IsReachable    bool   `json:"is_reachable" db:"is_reachable" gorm:"default:false"`
+	FetchError     string `json:"fetch_error" db:"fetch_error"`              // Last error message
+	FetchRetries   int    `json:"fetch_retries" db:"fetch_retries" gorm:"default:0"` // Number of failed attempts
+	LastFetchError *time.Time `json:"last_fetch_error" db:"last_fetch_error"` // When the last error occurred
+	
 	CreatedAt time.Time `json:"created_at" db:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at" gorm:"autoUpdateTime"`
 
