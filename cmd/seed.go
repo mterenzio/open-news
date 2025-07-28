@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -187,11 +188,53 @@ func createMockUserSourceRelationships(user models.User) {
 func importTestUserFollows(user models.User) {
 	log.Printf("📥 Attempting to import follows for %s using UserFollowsService...", user.Handle)
 	
-	// Initialize Bluesky client and UserFollowsService
+	// Initialize Bluesky client
 	client := bluesky.NewClient("https://bsky.social")
+	
+	// Check if we have credentials for authentication
+	identifier := os.Getenv("BLUESKY_IDENTIFIER")
+	password := os.Getenv("BLUESKY_PASSWORD")
+	
+	if identifier != "" && password != "" {
+		log.Printf("🔐 Found Bluesky credentials, authenticating for real follow import...")
+		if err := client.CreateSession(identifier, password); err != nil {
+			log.Printf("❌ Failed to authenticate with Bluesky: %v", err)
+			log.Printf("💡 Falling back to mock data...")
+			createMockUserSourceRelationships(user)
+			return
+		}
+		
+		// Resolve real DID if user has a test DID
+		if strings.Contains(user.BlueSkyDID, "test-") {
+			log.Printf("🔍 Resolving real DID for %s...", user.Handle)
+			realDID, err := client.ResolveHandle(user.Handle)
+			if err != nil {
+				log.Printf("❌ Failed to resolve real DID: %v", err)
+				createMockUserSourceRelationships(user)
+				return
+			}
+			
+			log.Printf("✅ Resolved real DID: %s", realDID)
+			
+			// Update user with real DID
+			if err := database.DB.Model(&user).Update("blue_sky_d_id", realDID).Error; err != nil {
+				log.Printf("❌ Failed to update user DID: %v", err)
+				createMockUserSourceRelationships(user)
+				return
+			}
+			user.BlueSkyDID = realDID
+		}
+		
+		log.Printf("✅ Successfully authenticated, importing real follows...")
+	} else {
+		log.Printf("💡 No Bluesky credentials found, creating mock relationships...")
+		createMockUserSourceRelationships(user)
+		return
+	}
+	
 	userFollowsService := services.NewUserFollowsService(database.DB, client)
 	
-	// Create configuration for follow import (no authentication required for testing)
+	// Create configuration for follow import with authentication
 	config := services.RefreshConfig{
 		RefreshInterval: 24 * time.Hour,
 		BatchSize:       100, // Larger batch for seeding
@@ -202,42 +245,14 @@ func importTestUserFollows(user models.User) {
 	if err := userFollowsService.ImportUserFollows(&user, config); err != nil {
 		log.Printf("⚠️  Could not import follows with UserFollowsService: %v", err)
 		log.Printf("💡 Creating mock user-source relationships for testing...")
-		
-		// Create relationships with all existing sources for testing purposes
-		var sources []models.Source
-		if err := database.DB.Find(&sources).Error; err != nil {
-			log.Printf("❌ Failed to fetch sources: %v", err)
-			return
-		}
-		
-		imported := 0
-		for _, source := range sources {
-			// Check if relationship already exists
-			var existingRelation models.UserSource
-			if err := database.DB.Where("user_id = ? AND source_id = ?", user.ID, source.ID).First(&existingRelation).Error; err != nil {
-				// Relationship doesn't exist, create it
-				userSource := models.UserSource{
-					UserID:   user.ID,
-					SourceID: source.ID,
-				}
-				
-				if err := database.DB.Create(&userSource).Error; err != nil {
-					log.Printf("❌ Failed to create user-source relationship: %v", err)
-					continue
-				}
-				imported++
-			}
-		}
-		
-		if imported > 0 {
-			log.Printf("✅ Created %d mock user-source relationships for testing", imported)
-		} else {
-			log.Printf("💡 No new relationships created (might already exist)")
-		}
+		createMockUserSourceRelationships(user)
 		return
 	}
 	
-	log.Printf("✅ Successfully imported follows for %s using UserFollowsService", user.Handle)
+	// Check results
+	var followCount int64
+	database.DB.Model(&models.UserSource{}).Where("user_id = ?", user.ID).Count(&followCount)
+	log.Printf("✅ Successfully imported %d real follows for %s", followCount, user.Handle)
 }
 
 func seedPopularSources() {

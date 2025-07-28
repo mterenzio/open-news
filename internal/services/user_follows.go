@@ -60,10 +60,13 @@ func (s *UserFollowsService) ImportUserFollows(user *models.User, config Refresh
 	relationshipsCreated := 0
 
 	for {
+		log.Printf("📥 Fetching follows batch (cursor: %s, limit: %d)...", cursor, limit)
 		follows, err := s.blueskyClient.GetFollows(user.BlueSkyDID, limit, cursor)
 		if err != nil {
 			return fmt.Errorf("failed to get follows from Bluesky: %w", err)
 		}
+
+		log.Printf("📦 Received %d follows in this batch", len(follows.Follows))
 
 		// Process each follow
 		for _, follow := range follows.Follows {
@@ -139,10 +142,13 @@ func (s *UserFollowsService) ImportUserFollows(user *models.User, config Refresh
 		}
 
 		// Check if there are more follows to fetch
+		log.Printf("🔍 Pagination check: cursor='%s', batch_size=%d, limit=%d", follows.Cursor, len(follows.Follows), limit)
 		if follows.Cursor == "" || len(follows.Follows) < limit {
+			log.Printf("✅ Reached end of follows (no more pages)")
 			break
 		}
 		cursor = follows.Cursor
+		log.Printf("➡️  Continuing to next page with cursor: %s", cursor)
 
 		// Rate limiting
 		time.Sleep(config.RateLimit)

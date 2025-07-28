@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -31,6 +32,21 @@ func NewWorkerService() *WorkerService {
 	
 	// Initialize Bluesky client
 	blueskyClient := bluesky.NewClient("https://bsky.social")
+	
+	// Authenticate with Bluesky if credentials are available
+	identifier := os.Getenv("BLUESKY_IDENTIFIER")
+	password := os.Getenv("BLUESKY_PASSWORD")
+	if identifier != "" && password != "" {
+		log.Printf("🔐 Authenticating Bluesky client for %s...", identifier)
+		if err := blueskyClient.CreateSession(identifier, password); err != nil {
+			log.Printf("⚠️  Failed to authenticate with Bluesky: %v", err)
+			log.Printf("💡 Follow imports will use public API (limited functionality)")
+		} else {
+			log.Printf("✅ Successfully authenticated with Bluesky")
+		}
+	} else {
+		log.Printf("💡 No Bluesky credentials configured, using public API")
+	}
 	
 	// Initialize firehose consumer
 	firehoseConsumer := bluesky.NewFirehoseConsumer(database.DB, blueskyClient)

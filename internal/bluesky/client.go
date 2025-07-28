@@ -82,10 +82,10 @@ type Embed struct {
 
 // ExternalEmbed represents an external link embed
 type ExternalEmbed struct {
-	URI         string `json:"uri"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Thumb       string `json:"thumb,omitempty"`
+	URI         string      `json:"uri"`
+	Title       string      `json:"title"`
+	Description string      `json:"description"`
+	Thumb       interface{} `json:"thumb,omitempty"` // Can be string or object
 }
 
 // ImageEmbed represents an image embed
@@ -96,9 +96,9 @@ type ImageEmbed struct {
 
 // ImageRef represents an image reference
 type ImageRef struct {
-	Type string `json:"$type"`
-	Ref  string `json:"ref"`
-	Size int    `json:"size"`
+	Type string      `json:"$type"`
+	Ref  interface{} `json:"ref"` // Can be string or object
+	Size int         `json:"size"`
 }
 
 // Timeline represents a timeline response
@@ -261,7 +261,7 @@ func ExtractLinks(post *Post) []string {
 
 // FollowsResponse represents the response from getFollows
 type FollowsResponse struct {
-	Subject string   `json:"subject"`
+	Subject Author   `json:"subject"`
 	Follows []Author `json:"follows"`
 	Cursor  string   `json:"cursor,omitempty"`
 }
@@ -303,4 +303,38 @@ func (c *Client) GetFollows(actor string, limit int, cursor string) (*FollowsRes
 	}
 
 	return &follows, nil
+}
+
+// ResolveHandle resolves a handle to a DID
+func (c *Client) ResolveHandle(handle string) (string, error) {
+	url := fmt.Sprintf("%s/xrpc/com.atproto.identity.resolveHandle?handle=%s", c.baseURL, handle)
+	
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to resolve handle: %s", resp.Status)
+	}
+	
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	
+	var result struct {
+		DID string `json:"did"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", err
+	}
+	
+	return result.DID, nil
 }
