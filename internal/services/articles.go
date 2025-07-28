@@ -14,6 +14,7 @@ import (
 	"open-news/internal/bluesky"
 	"open-news/internal/models"
 
+	"github.com/google/uuid"
 	"golang.org/x/net/html"
 	"gorm.io/gorm"
 )
@@ -1051,4 +1052,93 @@ func truncateText(text string, maxLength int) string {
 		return text
 	}
 	return text[:maxLength-3] + "..."
+}
+
+// ValidateAndCleanupExistingArticles validates existing articles and removes those without proper NewsArticle schema
+func (as *ArticlesService) ValidateAndCleanupExistingArticles(dryRun bool) error {
+	log.Printf("🔍 Starting validation of existing articles (dry run: %v)...", dryRun)
+	
+	var articles []models.Article
+	if err := as.db.Find(&articles).Error; err != nil {
+		return fmt.Errorf("failed to fetch articles: %w", err)
+	}
+
+	log.Printf("📊 Found %d articles to validate", len(articles))
+	
+	invalidCount := 0
+	validCount := 0
+	errorCount := 0
+
+	for i, article := range articles {
+		log.Printf("🔍 Validating article %d/%d: %s", i+1, len(articles), article.URL)
+		
+		// Check if article has JSON-LD data with NewsArticle type
+		if article.JSONLDData == "" {
+			log.Printf("❌ Article has no JSON-LD data: %s", article.URL)
+			invalidCount++
+			
+			if !dryRun {
+				if err := as.deleteArticleAndReferences(article.ID); err != nil {
+					log.Printf("⚠️ Failed to delete article %s: %v", article.URL, err)
+					errorCount++
+				} else {
+					log.Printf("🗑️ Deleted invalid article: %s", article.URL)
+				}
+			}
+			continue
+		}
+
+		// Parse and validate JSON-LD
+		if !as.isNewsArticle(article.JSONLDData) {
+			log.Printf("❌ Article JSON-LD is not NewsArticle type: %s", article.URL)
+			invalidCount++
+			
+			if !dryRun {
+				if err := as.deleteArticleAndReferences(article.ID); err != nil {
+					log.Printf("⚠️ Failed to delete article %s: %v", article.URL, err)
+					errorCount++
+				} else {
+					log.Printf("🗑️ Deleted invalid article: %s", article.URL)
+				}
+			}
+			continue
+		}
+
+		validCount++
+		log.Printf("✅ Article validated as NewsArticle: %s", article.URL)
+	}
+
+	log.Printf("📊 Validation complete:")
+	log.Printf("   ✅ Valid articles: %d", validCount)
+	log.Printf("   ❌ Invalid articles: %d", invalidCount)
+	log.Printf("   ⚠️ Errors: %d", errorCount)
+	
+	if dryRun {
+		log.Printf("🔍 This was a dry run - no articles were deleted")
+		log.Printf("💡 Run with dryRun=false to actually remove invalid articles")
+	}
+
+	return nil
+}
+
+// deleteArticleAndReferences deletes an article and all its related data
+func (as *ArticlesService) deleteArticleAndReferences(articleID uuid.UUID) error {
+	// Delete in reverse order of foreign key dependencies
+	
+	// Delete article facts
+	if err := as.db.Where("article_id = ?", articleID).Delete(&models.ArticleFact{}).Error; err != nil {
+		return fmt.Errorf("failed to delete article facts: %w", err)
+	}
+	
+	// Delete source articles
+	if err := as.db.Where("article_id = ?", articleID).Delete(&models.SourceArticle{}).Error; err != nil {
+		return fmt.Errorf("failed to delete source articles: %w", err)
+	}
+	
+	// Finally delete the article itself
+	if err := as.db.Delete(&models.Article{}, articleID).Error; err != nil {
+		return fmt.Errorf("failed to delete article: %w", err)
+	}
+
+	return nil
 }

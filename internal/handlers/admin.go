@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -18,13 +19,15 @@ import (
 type AdminHandler struct {
 	db                 *gorm.DB
 	userFollowsService *services.UserFollowsService
+	articlesService    *services.ArticlesService
 }
 
 // NewAdminHandler creates a new admin handler
-func NewAdminHandler(db *gorm.DB, userFollowsService *services.UserFollowsService) *AdminHandler {
+func NewAdminHandler(db *gorm.DB, userFollowsService *services.UserFollowsService, articlesService *services.ArticlesService) *AdminHandler {
 	return &AdminHandler{
 		db:                 db,
 		userFollowsService: userFollowsService,
+		articlesService:    articlesService,
 	}
 }
 
@@ -952,6 +955,54 @@ func (h *AdminHandler) generateArticleInspectionHTML(article models.Article) str
             </div>`
 	}
 
+	// JSON-LD and Open Graph Data sections for article type analysis
+	html += `
+            <!-- Structured Data Analysis -->
+            <div style="margin-bottom: 2rem;">
+                <h2 style="color: #1e293b; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem;">Structured Data Analysis</h2>
+                <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1rem;">
+                    This data helps determine if the content is actually a news article. Look for "@type": "NewsArticle" in JSON-LD or article-related Open Graph tags.
+                </p>`
+
+	// JSON-LD Data
+	if article.JSONLDData != "" {
+		html += `
+                <details style="margin-bottom: 1rem;">
+                    <summary style="cursor: pointer; padding: 0.75rem; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; font-weight: 600; color: #0c4a6e;">
+                        📊 JSON-LD Structured Data
+                    </summary>
+                    <div style="margin-top: 0.5rem; padding: 1rem; background: #1e293b; border-radius: 6px; border: 1px solid #334155;">
+                        <pre style="color: #e2e8f0; font-size: 0.875rem; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; margin: 0; overflow-x: auto;">` + article.JSONLDData + `</pre>
+                    </div>
+                </details>`
+	} else {
+		html += `
+                <div style="padding: 0.75rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; margin-bottom: 1rem;">
+                    <span style="color: #991b1b;">⚠️ No JSON-LD structured data found</span>
+                </div>`
+	}
+
+	// Open Graph Data
+	if article.OGData != "" {
+		html += `
+                <details style="margin-bottom: 1rem;">
+                    <summary style="cursor: pointer; padding: 0.75rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-weight: 600; color: #166534;">
+                        🏷️ Open Graph Metadata
+                    </summary>
+                    <div style="margin-top: 0.5rem; padding: 1rem; background: #1e293b; border-radius: 6px; border: 1px solid #334155;">
+                        <pre style="color: #e2e8f0; font-size: 0.875rem; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; margin: 0; overflow-x: auto;">` + article.OGData + `</pre>
+                    </div>
+                </details>`
+	} else {
+		html += `
+                <div style="padding: 0.75rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; margin-bottom: 1rem;">
+                    <span style="color: #991b1b;">⚠️ No Open Graph metadata found</span>
+                </div>`
+	}
+
+	html += `
+            </div>`
+
 	// Raw JSON section for debugging
 	html += `
             <div style="margin-bottom: 2rem;">
@@ -986,4 +1037,26 @@ func (h *AdminHandler) generateArticleInspectionHTML(article models.Article) str
 </html>`
 
 	return html
+}
+
+// ValidateArticles validates existing articles and optionally removes invalid ones
+func (h *AdminHandler) ValidateArticles(c *gin.Context) {
+	dryRun := c.DefaultQuery("dry_run", "true") == "true"
+	
+	if err := h.articlesService.ValidateAndCleanupExistingArticles(dryRun); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("Validation failed: %v", err),
+		})
+		return
+	}
+	
+	message := "Article validation completed successfully"
+	if dryRun {
+		message += " (dry run - no articles were deleted)"
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"message": message,
+		"dry_run": dryRun,
+	})
 }

@@ -1,5 +1,7 @@
 # open.news - Social News Aggregation Platform
 
+# open.news - Social News Aggregation Platform
+
 open.news is an advanced social news aggregation platform built on top of Bluesky. It intelligently aggregates, ranks, and curates articles shared across the Bluesky network using sophisticated quality scoring algorithms and engagement metrics.
 
 ## Features
@@ -62,11 +64,6 @@ open.news is an advanced social news aggregation platform built on top of Bluesk
    ```bash
    make seed
    ```
-   
-   **For development with real data** (complete reset):
-   ```bash
-   ./dev reset && go run cmd/seed.go -handle your.handle.bsky.social
-   ```
 
 5. **Test the API**:
    ```bash
@@ -88,9 +85,6 @@ Use the development script for convenient server management:
 ```bash
 # Restart server (kills old process and starts new one)
 ./dev restart
-
-# Complete database reset and seed with real data
-./dev reset && go run cmd/seed.go -handle your.handle.bsky.social
 
 # Check server status and health
 ./dev status
