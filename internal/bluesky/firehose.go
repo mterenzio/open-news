@@ -355,6 +355,74 @@ func (fc *FirehoseConsumer) processLink(linkURL string, source *models.Source, p
 		log.Printf("New article created with metadata: %s (title: %s)", canonicalURL, article.Title)
 	} else if err != nil {
 		return fmt.Errorf("failed to query article: %w", err)
+	} else {
+		// Article exists - check if we should refresh metadata for unreachable articles
+		// or articles that haven't been fetched recently
+		shouldRefresh := false
+		now := time.Now()
+		
+		// Refresh if article is marked as unreachable (to check if it's become reachable)
+		if !article.IsReachable {
+			shouldRefresh = true
+		}
+		
+		// Refresh if it's been more than 24 hours since last fetch attempt
+		if article.LastFetchAt != nil && time.Since(*article.LastFetchAt) > 24*time.Hour {
+			shouldRefresh = true
+		}
+		
+		// Refresh if article has never been fetched
+		if article.LastFetchAt == nil {
+			shouldRefresh = true
+		}
+		
+		if shouldRefresh {
+			log.Printf("Refreshing metadata for existing article: %s", canonicalURL)
+			
+			// Create context for metadata extraction
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			
+			// Extract metadata from the URL
+			metadata, err := fc.metadataExtractor.ExtractMetadata(ctx, canonicalURL)
+			
+			if err != nil {
+				log.Printf("Failed to refresh metadata for %s: %v", canonicalURL, err)
+				// Update article to mark as unreachable
+				article.IsReachable = false
+				article.FetchError = err.Error()
+				article.FetchRetries++
+				article.LastFetchError = &now
+				article.LastFetchAt = &now
+			} else {
+				// Update article with refreshed metadata
+				article.Title = metadata.Title
+				article.Description = metadata.Description
+				article.Author = metadata.Author
+				article.SiteName = metadata.SiteName
+				article.ImageURL = metadata.ImageURL
+				article.PublishedAt = metadata.PublishedAt
+				article.JSONLDData = metadata.JSONLDData
+				article.OGData = metadata.OGData
+				article.HTMLContent = metadata.HTMLContent
+				article.TextContent = metadata.TextContent
+				article.WordCount = int(metadata.WordCount)
+				article.ReadingTime = int(metadata.ReadingTime)
+				article.Language = metadata.Language
+				article.IsCached = true
+				article.IsReachable = true
+				article.FetchError = "" // Clear any previous error
+				article.CachedAt = &now
+				article.LastFetchAt = &now
+			}
+			
+			// Save the updated article
+			if err := fc.db.Save(&article).Error; err != nil {
+				log.Printf("Failed to update article %s: %v", canonicalURL, err)
+			} else {
+				log.Printf("Updated article metadata: %s (reachable: %v)", canonicalURL, article.IsReachable)
+			}
+		}
 	}
 
 	// Create post URI from Jetstream data
