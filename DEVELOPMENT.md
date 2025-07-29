@@ -169,7 +169,22 @@ The admin interface provides several tools for managing articles:
    - Open Graph metadata
    - Content statistics and quality metrics
 
-2. **Article Validation and Cleanup**: Remove articles that don't meet NewsArticle schema requirements
+2. **URL Validation Testing**: Test if any URL would be accepted as a valid NewsArticle:
+   ```bash
+   # Test if a URL has valid NewsArticle JSON-LD schema
+   curl -s -u admin:admin123 "http://localhost:8080/admin/inspect?url=https://example.com/article" | jq .
+   
+   # Example with a real TechCrunch article:
+   curl -s -u admin:admin123 "http://localhost:8080/admin/inspect?url=https://techcrunch.com/2025/07/28/microsoft-edge-is-now-an-ai-browser-with-launch-of-copilot-mode/" | jq .
+   ```
+   This endpoint returns:
+   - `isNewsArticle`: boolean indicating if the URL contains valid NewsArticle schema
+   - `error`: any validation or network errors encountered
+   - Useful for debugging why articles from specific sources aren't being captured
+   
+   **Note**: The validation supports both simple JSON-LD structures and complex `@graph` arrays commonly used by major news sites.
+
+3. **Article Validation and Cleanup**: Remove articles that don't meet NewsArticle schema requirements
    ```bash
    # Dry run (preview what would be deleted)
    curl -X POST -u admin:admin123 "http://localhost:8080/admin/validate-articles?dry_run=true"

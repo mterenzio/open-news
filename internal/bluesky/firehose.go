@@ -621,6 +621,17 @@ func (fc *FirehoseConsumer) checkForNewsArticleType(obj interface{}) bool {
 		return false
 	}
 
+	// Check for @graph structure (common in JSON-LD)
+	if graphField, hasGraph := jsonObj["@graph"]; hasGraph {
+		if graphArray, isArray := graphField.([]interface{}); isArray {
+			for _, graphItem := range graphArray {
+				if fc.checkForNewsArticleType(graphItem) {
+					return true
+				}
+			}
+		}
+	}
+
 	// Check @type field
 	typeField, exists := jsonObj["@type"]
 	if !exists {

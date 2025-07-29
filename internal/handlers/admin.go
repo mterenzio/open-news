@@ -748,6 +748,32 @@ func (h *AdminHandler) ServeArticleInspection(c *gin.Context) {
 	c.String(http.StatusOK, html)
 }
 
+// InspectURL provides URL inspection for debugging article validation
+func (h *AdminHandler) InspectURL(c *gin.Context) {
+	url := c.Query("url")
+	if url == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "url parameter is required"})
+		return
+	}
+
+	// Test if this URL would be considered a NewsArticle
+	result, err := h.articlesService.CheckIfNewsArticle(c.Request.Context(), url)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"url": url,
+			"isNewsArticle": false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"url": url,
+		"isNewsArticle": result,
+		"error": nil,
+	})
+}
+
 // generateArticleInspectionHTML generates the detailed article inspection page
 func (h *AdminHandler) generateArticleInspectionHTML(article models.Article) string {
 	html := h.generateAdminLayout("Article Inspection", "/admin/articles")

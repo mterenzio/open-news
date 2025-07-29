@@ -183,6 +183,7 @@ func setupServer(workerService *worker.WorkerService) {
 		admin.GET("/sources", adminHandler.ServeSourcesPage)
 		admin.GET("/articles", adminHandler.ServeArticlesPage)
 		admin.GET("/articles/:id", adminHandler.ServeArticleInspection)
+		admin.GET("/inspect", adminHandler.InspectURL)
 		admin.POST("/refresh-follows", adminHandler.RefreshAllUserFollows)
 		admin.POST("/refresh-follows/:user", adminHandler.RefreshUserFollows)
 		admin.POST("/validate-articles", adminHandler.ValidateArticles)

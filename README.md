@@ -157,6 +157,15 @@ The web interface provides an easy way to test and explore the API without remem
 
 - `GET /health` - Health check endpoint
 
+### Admin (Password Protected)
+
+- `GET /admin/` - Admin dashboard
+- `GET /admin/articles` - Browse all articles
+- `GET /admin/articles/:id` - Inspect individual article
+- `GET /admin/inspect?url=<url>` - Test if URL contains valid NewsArticle schema
+- `POST /admin/validate-articles` - Validate and cleanup articles
+- `POST /admin/refresh-follows` - Refresh all user follows
+
 ### Query Parameters
 
 Both feed endpoints support:
