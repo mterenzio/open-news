@@ -11,6 +11,7 @@ import (
 	"open-news/internal/bluesky"
 	"open-news/internal/database"
 	"open-news/internal/handlers"
+	"open-news/internal/services"
 	"open-news/internal/worker"
 
 	"github.com/gin-gonic/gin"
@@ -96,15 +97,21 @@ func setupServer(workerService *worker.WorkerService) {
 	// Initialize handlers
 	feedHandler := handlers.NewFeedHandler(database.DB, workerService)
 	feedPageHandler := handlers.NewFeedPageHandler(database.DB)
-	adminHandler := handlers.NewAdminHandler(database.DB, workerService.GetUserFollowsService())
-	docsHandler := handlers.NewDocsHandler()
 	
-	// Initialize Bluesky client for custom feeds
+	// Initialize Bluesky client for admin operations
 	blueskyBaseURL := os.Getenv("BLUESKY_BASE_URL")
 	if blueskyBaseURL == "" {
 		blueskyBaseURL = "https://bsky.social"
 	}
 	blueskyClient := bluesky.NewClient(blueskyBaseURL)
+	
+	// Initialize services for admin handler
+	articlesService := services.NewArticlesService(database.DB, blueskyClient)
+	adminHandler := handlers.NewAdminHandler(database.DB, workerService.GetUserFollowsService(), articlesService)
+	
+	docsHandler := handlers.NewDocsHandler()
+	
+	// Initialize Bluesky feed handler
 	blueskyFeedHandler := handlers.NewBlueSkyFeedHandler(database.DB, blueskyClient)
 
 	// Health check
@@ -178,6 +185,7 @@ func setupServer(workerService *worker.WorkerService) {
 		admin.GET("/articles/:id", adminHandler.ServeArticleInspection)
 		admin.POST("/refresh-follows", adminHandler.RefreshAllUserFollows)
 		admin.POST("/refresh-follows/:user", adminHandler.RefreshUserFollows)
+		admin.POST("/validate-articles", adminHandler.ValidateArticles)
 	}
 
 	// Get port from environment or default to 8080

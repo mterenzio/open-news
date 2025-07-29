@@ -12,6 +12,8 @@ open.news is an advanced social news aggregation platform built on top of Bluesk
 - **Article Caching**: Canonical URL storage with JSON-LD and Open Graph metadata
 - **AI-Powered Facts**: Extracts facts from articles with OpenAI embeddings
 - **Background Workers**: Automated processing of articles and feed updates
+- **Admin Interface**: Web-based admin panel for managing articles, users, and data quality
+- **Article Validation**: Ensures only valid NewsArticle content is stored using JSON-LD schema validation
 - **Dual Feeds**: 
   - Global top stories feed
   - Personalized feed based on user's followed sources

@@ -155,6 +155,51 @@ Seeds using a specific Bluesky DID if you know it.
 
 3. **View logs**: The application logs will show firehose connections and article discoveries
 
+## Admin Interface
+
+The application includes an admin interface for managing articles, users, and sources. Access it at http://localhost:8080/admin/ (password: `admin123`).
+
+### Article Management
+
+The admin interface provides several tools for managing articles:
+
+1. **Article Inspection**: View detailed information about any article including:
+   - Basic metadata (title, author, publication date)
+   - JSON-LD structured data (for NewsArticle validation)
+   - Open Graph metadata
+   - Content statistics and quality metrics
+
+2. **Article Validation and Cleanup**: Remove articles that don't meet NewsArticle schema requirements
+   ```bash
+   # Dry run (preview what would be deleted)
+   curl -X POST -u admin:admin123 "http://localhost:8080/admin/validate-articles?dry_run=true"
+   
+   # Actually delete invalid articles
+   curl -X POST -u admin:admin123 "http://localhost:8080/admin/validate-articles?dry_run=false"
+   ```
+
+3. **Real-time Validation**: The system now validates all articles at ingestion time:
+   - Firehose processing validates NewsArticle schema before storing articles
+   - Manual article imports through ArticlesService also validate schema
+   - Only articles with proper JSON-LD NewsArticle markup are stored
+
+### Admin Features
+
+- **Users Page**: View and manage user accounts and follows
+- **Sources Page**: Manage news sources and their quality scores  
+- **Articles Page**: Browse all articles with filtering and search
+- **Individual Article Inspection**: Deep dive into article metadata and validation status
+- **Follow Management**: Refresh user follows from Bluesky API
+
+### Data Quality Assurance
+
+The application enforces strict data quality standards:
+
+- **NewsArticle Validation**: All articles must have valid JSON-LD NewsArticle schema
+- **Automatic Cleanup**: Invalid articles are prevented from entering the database
+- **Manual Cleanup**: Admin can run validation to clean up historical invalid data
+- **Content Validation**: Articles are validated for title, description, and publication metadata
+
 ## Troubleshooting
 
 ### Database Connection Issues
